@@ -1,0 +1,9 @@
+variable,label,units,coding
+group,Comparison group,,
+cont_normal,"Continuous, approximately symmetric",arbitrary units,
+cont_skewed,"Continuous, right-skewed",arbitrary units,
+constant_col,"Continuous, constant in every row",arbitrary units,
+all_missing,"Continuous, missing in every row",arbitrary units,
+tiny_value,"Continuous, small magnitude, one missing value",arbitrary units,
+cat_binary,"Categorical, two levels",,
+cat_multi,"Categorical, three levels",,

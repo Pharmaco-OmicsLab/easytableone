@@ -1,0 +1,116 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`FormatTable - GENERIC > formats correctly against snapshot 1`] = `
+{
+  "codingNotes": [
+    "Gender: Female=Females, Male=Males.",
+  ],
+  "dataQualityNotes": undefined,
+  "dataQualitySectionTitle": "Data quality notes",
+  "footnotes": [
+    {
+      "marker": "1",
+      "text": "Minimum expected count < 5",
+    },
+  ],
+  "header": [
+    "Characteristic",
+    "Group A (N=100)",
+    "Group B (N=100)",
+    "SMD",
+    "P-value",
+  ],
+  "journal": "GENERIC",
+  "methodsParagraph": "Continuous variables that met the normality assumption were summarized as mean (SD) and compared between groups using Welch's t-test. Continuous variables that did not meet the normality assumption were summarized as median (IQR) and compared using the Mann-Whitney U test. Normality was assessed by Shapiro-Wilk for n ≤ 2000 and by skewness/kurtosis criterion (|skew| < 1 and |excess kurtosis| < 1) for n > 2000. Categorical variables were summarized as n (%) and compared using the chi-square test. Standardized mean differences (SMD) are reported alongside P-values; SMD > 0.1 is conventionally interpreted as imbalanced. Analyses were performed in EasyTableOne v1.0.0-test (ruleset v1.4) using scipy v1.0, numpy v1.0, pandas v1.0, statsmodels v1.0 on Pyodide 0.30.0.dev0 (CPython 3.14.0, WebAssembly, in-browser; no server).",
+  "rows": [
+    {
+      "cells": [
+        "Age, Mean (SD)",
+        "45.2 (5.7)",
+        "47.9 (6.1)",
+        "0.450",
+        "0.002",
+      ],
+      "footnoteRefs": [],
+      "indent": 0,
+      "isSubgroup": false,
+    },
+    {
+      "cells": [
+        "Biomarker, Median (IQR)",
+        "12.5 (10.1, 15.6)",
+        "14.2 (11.5, 18.9)",
+        "0.320",
+        "<0.001",
+      ],
+      "footnoteRefs": [],
+      "indent": 0,
+      "isSubgroup": false,
+    },
+    {
+      "cells": [
+        "Gender, n (%) (Females)",
+        "60 (60.0%)",
+        "45 (45.0%)",
+        "0.150",
+        "0.033",
+      ],
+      "footnoteRefs": [],
+      "indent": 0,
+      "isSubgroup": false,
+    },
+    {
+      "cells": [
+        "Condition",
+        "",
+        "",
+        "0.080",
+        "0.349",
+      ],
+      "footnoteRefs": [
+        "1",
+      ],
+      "indent": 0,
+      "isSubgroup": false,
+    },
+    {
+      "cells": [
+        "Mild",
+        "50 (50.0%)",
+        "40 (40.0%)",
+        "",
+        "",
+      ],
+      "footnoteRefs": [],
+      "indent": 1,
+      "isSubgroup": true,
+    },
+    {
+      "cells": [
+        "Moderate",
+        "30 (30.0%)",
+        "40 (40.0%)",
+        "",
+        "",
+      ],
+      "footnoteRefs": [],
+      "indent": 1,
+      "isSubgroup": true,
+    },
+    {
+      "cells": [
+        "Severe",
+        "20 (20.0%)",
+        "20 (20.0%)",
+        "",
+        "",
+      ],
+      "footnoteRefs": [],
+      "indent": 1,
+      "isSubgroup": true,
+    },
+  ],
+  "rulesetVersion": "1.4",
+  "title": "Table 1: Baseline Characteristics, by group",
+}
+`;

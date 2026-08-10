@@ -1,0 +1,278 @@
+{
+  "EasyTableOne_Ruleset": {
+    "version": "1.4",
+    "changelog": "v1.4 (Session 104): suppress_trailing_zero is now a row-level rule (D86) - a variable renders without decimals only when every summary value for that variable is integer-valued. Ruleset values are unchanged. v1.3 (Session 14): Added data_quality_section_title per D42. v1.2 (Session 12): Added table_title_template, variable_coding_section_title, number_format fields per D35-D40. v1.1: Replaced normality_threshold with normality_logic block. NOTE: `conditional_decimals` rules MUST be ordered most-specific-first. Patch: NEJM iqr_delimiter is ' to ' (with spaces) for readable output.",
+    "global_defaults": {
+      "missing_data_label": "Missing",
+      "normality_logic": {
+        "small_n_test": "shapiro",
+        "small_n_threshold_p": 0.05,
+        "large_n_threshold_n": 2000,
+        "large_n_skew_max": 1.0,
+        "large_n_kurt_max": 1.0
+      },
+      "test_selection_logic": {
+        "continuous_normal": "Student's t-test (2 groups) or ANOVA (>2 groups)",
+        "continuous_non_normal": "Mann-Whitney U (2 groups) or Kruskal-Wallis (>2 groups)",
+        "categorical_large_sample": "Chi-square test",
+        "categorical_small_sample": "Fisher's exact test (if any cell < 5)"
+      }
+    },
+    "journals": [
+      {
+        "journal_id": "NEJM",
+        "display_name": "New England Journal of Medicine",
+        "table_title_template": "Table 1: Baseline Characteristics, by {grouping_label}",
+        "variable_coding_section_title": "Variable coding notes",
+        "data_quality_section_title": "Data quality notes",
+        "number_format": {
+          "thousand_separator": true,
+          "suppress_trailing_zero": true,
+          "decimal_precision": 1
+        },
+        "plot_theme": {
+          "seaborn_style": "ticks",
+          "color_palette": ["#BC3C29", "#0072B5", "#E18727", "#20854E", "#7876B1", "#6F99AD", "#FFDC91", "#EE4C97"],
+          "font_family": "DejaVu Sans",
+          "font_size_base": 8,
+          "despine": true,
+          "bar_edge_color": "black",
+          "bar_edge_linewidth": 0.5,
+          "line_width": 1.0,
+          "figure_dpi_screen": 150,
+          "figure_dpi_export": 300
+        },
+        "p_value_formatting": {
+          "leading_zero": true,
+          "max_decimal_places": 3,
+          "conditional_decimals": [
+            { "range": ">= 0.01", "decimals": 2 },
+            { "range": "0.001 to 0.01", "decimals": 3 }
+          ],
+          "threshold_low": "<0.001",
+          "italicize_p": false
+        },
+        "summary_statistics": {
+          "continuous_normal": "Mean (SD)",
+          "continuous_non_normal": "Median (IQR)",
+          "iqr_delimiter": " to ",
+          "categorical": "n (%)",
+          "percentage_decimals": 0
+        },
+        "table_styling": {
+          "bold_headers": true,
+          "indent_subgroups": true,
+          "row_spacing": "compact",
+          "footnote_sequence": ["*", "†", "‡", "§", "¶", "||", "**", "††", "‡‡", "§§", "¶¶", "||||"]
+        }
+      },
+      {
+        "journal_id": "JAMA",
+        "display_name": "Journal of the American Medical Association",
+        "table_title_template": "Table 1: Baseline Characteristics, by {grouping_label}",
+        "variable_coding_section_title": "Variable coding notes",
+        "data_quality_section_title": "Data quality notes",
+        "number_format": {
+          "thousand_separator": true,
+          "suppress_trailing_zero": true,
+          "decimal_precision": 1
+        },
+        "plot_theme": {
+          "seaborn_style": "ticks",
+          "color_palette": ["#374E55", "#DF8F44", "#00A1D5", "#B24745", "#79AF97", "#6A6599", "#80796B"],
+          "font_family": "DejaVu Sans",
+          "font_size_base": 8,
+          "despine": true,
+          "bar_edge_color": "black",
+          "bar_edge_linewidth": 0.5,
+          "line_width": 1.0,
+          "figure_dpi_screen": 150,
+          "figure_dpi_export": 300
+        },
+        "p_value_formatting": {
+          "leading_zero": false,
+          "max_decimal_places": 3,
+          "conditional_decimals": [
+            { "range": "> 0.99", "display": "> .99" },
+            { "range": ">= 0.01", "decimals": 2 },
+            { "range": "0.001 to 0.01", "decimals": 3 }
+          ],
+          "threshold_low": "<.001",
+          "italicize_p": true
+        },
+        "summary_statistics": {
+          "continuous_normal": "Mean (SD)",
+          "continuous_non_normal": "Median (IQR)",
+          "iqr_delimiter": "-",
+          "categorical": "n (%)",
+          "percentage_decimals": 1
+        },
+        "table_styling": {
+          "bold_headers": true,
+          "indent_subgroups": true,
+          "row_spacing": "standard",
+          "footnote_sequence": ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l"]
+        }
+      },
+      {
+        "journal_id": "LANCET",
+        "display_name": "The Lancet",
+        "table_title_template": "Table 1: Baseline Characteristics, by {grouping_label}",
+        "variable_coding_section_title": "Variable coding notes",
+        "data_quality_section_title": "Data quality notes",
+        "number_format": {
+          "thousand_separator": true,
+          "suppress_trailing_zero": true,
+          "decimal_precision": 1
+        },
+        "plot_theme": {
+          "seaborn_style": "whitegrid",
+          "color_palette": ["#00468B", "#ED0000", "#42B540", "#0099B4", "#925E9F", "#FDAF91", "#AD002A"],
+          "font_family": "DejaVu Sans",
+          "font_size_base": 8,
+          "despine": true,
+          "bar_edge_color": "#00468B",
+          "bar_edge_linewidth": 0.5,
+          "line_width": 1.2,
+          "figure_dpi_screen": 150,
+          "figure_dpi_export": 300
+        },
+        "p_value_formatting": {
+          "leading_zero": true,
+          "max_decimal_places": 4,
+          "threshold_low": "<0·0001",
+          "decimal_separator": "·",
+          "italicize_p": false
+        },
+        "summary_statistics": {
+          "continuous_normal": "mean (SD)",
+          "continuous_non_normal": "median (IQR)",
+          "iqr_delimiter": "–",
+          "categorical": "n (%)",
+          "percentage_decimals": 0
+        },
+        "table_styling": {
+          "bold_headers": false,
+          "indent_subgroups": true,
+          "row_spacing": "standard",
+          "footnote_sequence": ["*", "†", "‡", "§", "||", "¶", "#", "**", "††", "‡‡", "§§", "||||"]
+        }
+      },
+      {
+        "journal_id": "NATURE_MED",
+        "display_name": "Nature Medicine",
+        "table_title_template": "Table 1: Baseline Characteristics, by {grouping_label}",
+        "variable_coding_section_title": "Variable coding notes",
+        "data_quality_section_title": "Data quality notes",
+        "number_format": {
+          "thousand_separator": true,
+          "suppress_trailing_zero": true,
+          "decimal_precision": 1
+        },
+        "plot_theme": {
+          "seaborn_style": "white",
+          "color_palette": ["#E64B35", "#4DBBD5", "#00A087", "#3C5488", "#F39B7F", "#8491B4", "#91D1C2"],
+          "font_family": "DejaVu Sans",
+          "font_size_base": 8,
+          "despine": true,
+          "bar_edge_color": "none",
+          "bar_edge_linewidth": 0.0,
+          "line_width": 1.2,
+          "figure_dpi_screen": 150,
+          "figure_dpi_export": 300
+        },
+        "p_value_formatting": {
+          "leading_zero": true,
+          "max_decimal_places": 3,
+          "threshold_low": "<0.001",
+          "exact_p_values": true,
+          "italicize_p": true
+        },
+        "summary_statistics": {
+          "continuous_normal": "Mean ± SD",
+          "continuous_non_normal": "Median (IQR)",
+          "iqr_delimiter": ", ",
+          "categorical": "n (%)",
+          "percentage_decimals": 1
+        },
+        "table_styling": {
+          "bold_headers": true,
+          "indent_subgroups": false,
+          "row_spacing": "standard",
+          "footnote_sequence": ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l"]
+        }
+      },
+      {
+        "journal_id": "GENERIC",
+        "display_name": "Standard/Generic Format",
+        "table_title_template": "Table 1: Baseline Characteristics, by {grouping_label}",
+        "variable_coding_section_title": "Variable coding notes",
+        "data_quality_section_title": "Data quality notes",
+        "number_format": {
+          "thousand_separator": false,
+          "suppress_trailing_zero": true,
+          "decimal_precision": 1
+        },
+        "plot_theme": {
+          "seaborn_style": "whitegrid",
+          "color_palette": ["#4E79A7", "#F28E2B", "#E15759", "#76B7B2", "#59A14F", "#EDC948", "#B07AA1", "#FF9DA7"],
+          "font_family": "DejaVu Sans",
+          "font_size_base": 9,
+          "despine": false,
+          "bar_edge_color": "white",
+          "bar_edge_linewidth": 0.5,
+          "line_width": 1.2,
+          "figure_dpi_screen": 150,
+          "figure_dpi_export": 300
+        },
+        "p_value_formatting": {
+          "leading_zero": true,
+          "max_decimal_places": 3,
+          "threshold_low": "<0.001",
+          "italicize_p": false
+        },
+        "summary_statistics": {
+          "continuous_normal": "Mean (SD)",
+          "continuous_non_normal": "Median (IQR)",
+          "iqr_delimiter": ", ",
+          "categorical": "n (%)",
+          "percentage_decimals": 1
+        },
+        "table_styling": {
+          "bold_headers": true,
+          "indent_subgroups": true,
+          "row_spacing": "standard",
+          "footnote_sequence": ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"]
+        }
+      }
+    ],
+    "logic_mapping": [
+      {
+        "if": "data_type == 'continuous' AND distribution == 'normal'",
+        "then": {
+          "report_style": "mean_sd",
+          "test": "t_test_or_anova"
+        }
+      },
+      {
+        "if": "data_type == 'continuous' AND distribution == 'skewed'",
+        "then": {
+          "report_style": "median_iqr",
+          "test": "mann_whitney_or_kruskal"
+        }
+      },
+      {
+        "if": "data_type == 'categorical' AND min_expected_cell_count < 5",
+        "then": {
+          "test": "fisher_exact"
+        }
+      },
+      {
+        "if": "data_type == 'categorical' AND min_expected_cell_count >= 5",
+        "then": {
+          "test": "chi_square"
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "unit": {
+    "include": ["src/**/*.test.ts", "src/**/*.test.tsx", "tests/**/*.test.ts", "tests/**/*.test.tsx"],
+    "exclude": ["node_modules", "tests/e2e/**"]
+  },
+  "pyodide": {
+    "include": [
+      "tests/easytable_eda.test.ts",
+      "tests/fungi.e2e.test.ts",
+      "src/core/export/analysisHistory.test.ts",
+      "tests/golden/cross_validation.test.ts",
+      "tests/modeling_pyodide.test.ts",
+      "tests/outlier_roundtrip.test.ts",
+      "tests/perf.test.ts",
+      "tests/pythonPlots.test.ts",
+      "tests/stats.test.ts"
+    ]
+  }
+}

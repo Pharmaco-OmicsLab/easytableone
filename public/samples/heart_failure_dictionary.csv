@@ -1,0 +1,14 @@
+variable,label,units,coding
+age,Age,years,
+anaemia,Anaemia,,"0: No, 1: Yes"
+creatinine_phosphokinase,Creatine phosphokinase,mcg/L,
+diabetes,Diabetes,,"0: No, 1: Yes"
+ejection_fraction,Ejection fraction,%,
+high_blood_pressure,Hypertension,,"0: No, 1: Yes"
+platelets,Platelet count,platelets/µL,
+serum_creatinine,Serum creatinine,mg/dL,
+serum_sodium,Serum sodium,mmol/L,
+sex,Sex,,"0: Female, 1: Male"
+smoking,Smoking,,"0: No, 1: Yes"
+time,Follow-up period,days,
+DEATH_EVENT,Death during follow-up,,"0: Survived, 1: Died"

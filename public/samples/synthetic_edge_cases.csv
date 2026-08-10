@@ -1,0 +1,6 @@
+group,cont_normal,cont_skewed,constant_col,all_missing,tiny_value,cat_binary,cat_multi
+A,10,1.2,7,,0.1,yes,Red
+A,12,1.5,7,,0.2,no,Blue
+B,20,4.4,7,,0.3,yes,Green
+B,21,5.1,7,,0.4,yes,Red
+C,99,9.9,7,,,no,Blue

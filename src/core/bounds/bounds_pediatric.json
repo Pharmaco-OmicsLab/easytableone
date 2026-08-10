@@ -1,0 +1,29 @@
+{
+  "version": "1.0",
+  "population": "pediatric",
+  "unit_system_default": "metric",
+  "created": "2026-06-27",
+  "notes": "Conservative wide bounds. Prefer false-negatives over false-positives. Values are for human plausibility checking, not clinical reference ranges.",
+  "concepts": [
+    { "concept_id": "age", "label": "Age", "aliases": ["age", "age_years", "age_at_dx", "ageyears", "patient_age", "age_enroll", "agedx", "age_baseline"], "metric": { "unit": "years", "lower": 0, "upper": 130 }, "imperial": { "unit": "years", "lower": 0, "upper": 130 } },
+    { "concept_id": "weight", "label": "Body weight", "aliases": ["weight", "weight_kg", "wt", "bw", "body_weight", "mass", "body_mass"], "metric": { "unit": "kg", "lower": 0.3, "upper": 200, "notes": "Lower: extreme prematurity. Upper: capped at obese adolescent." }, "imperial": { "unit": "lbs", "lower": 0.7, "upper": 441 } },
+    { "concept_id": "height", "label": "Height / stature", "aliases": ["height", "height_cm", "ht", "stature", "body_height", "length"], "metric": { "unit": "cm", "lower": 20, "upper": 220, "notes": "Lower: extreme prematurity. Upper: tall adolescent." }, "imperial": { "unit": "in", "lower": 8, "upper": 87 } },
+    { "concept_id": "bmi", "label": "Body mass index", "aliases": ["bmi", "body_mass_index", "bmi_calc"], "metric": { "unit": "kg/m^2", "lower": 5, "upper": 100 }, "imperial": { "unit": "kg/m^2", "lower": 5, "upper": 100 } },
+    { "concept_id": "systolic_bp", "label": "Systolic blood pressure", "aliases": ["sbp", "sys_bp", "systolic", "systolic_bp", "sys", "bp_sys"], "metric": { "unit": "mmHg", "lower": 40, "upper": 200, "notes": "Upper reduced for pediatric hypertensive crisis." }, "imperial": { "unit": "mmHg", "lower": 40, "upper": 200 } },
+    { "concept_id": "diastolic_bp", "label": "Diastolic blood pressure", "aliases": ["dbp", "dia_bp", "diastolic", "diastolic_bp", "bp_dia"], "metric": { "unit": "mmHg", "lower": 20, "upper": 140, "notes": "Upper reduced for pediatric physiology." }, "imperial": { "unit": "mmHg", "lower": 20, "upper": 140 } },
+    { "concept_id": "heart_rate", "label": "Heart rate", "aliases": ["hr", "heart_rate", "heart_rate_bpm", "pulse", "bpm", "rhr"], "metric": { "unit": "bpm", "lower": 40, "upper": 330, "notes": "Upper allows neonatal supraventricular tachycardia." }, "imperial": { "unit": "bpm", "lower": 40, "upper": 330 } },
+    { "concept_id": "temperature", "label": "Body temperature", "aliases": ["temp", "temperature", "body_temp", "temp_c", "temp_f"], "metric": { "unit": "deg C", "lower": 34, "upper": 42 }, "imperial": { "unit": "deg F", "lower": 93.2, "upper": 107.6 } },
+    { "concept_id": "glucose", "label": "Blood glucose", "aliases": ["glucose", "gluc", "blood_glucose", "fbs", "fpg", "rbs", "bg"], "metric": { "unit": "mmol/L", "lower": 0.5, "upper": 70 }, "imperial": { "unit": "mg/dL", "lower": 9, "upper": 1261 } },
+    { "concept_id": "hba1c", "label": "HbA1c", "aliases": ["hba1c", "a1c", "haemoglobin_a1c", "hemoglobin_a1c", "hgba1c", "glycohb"], "metric": { "unit": "%", "lower": 2, "upper": 20 }, "imperial": { "unit": "%", "lower": 2, "upper": 20 } },
+    { "concept_id": "hemoglobin", "label": "Hemoglobin", "aliases": ["hgb", "hb", "hemoglobin", "haemoglobin", "hgb_g", "hb_level"], "metric": { "unit": "g/dL", "lower": 3, "upper": 25, "notes": "Lower reduced for severe pediatric anemia." }, "imperial": { "unit": "g/dL", "lower": 3, "upper": 25 } },
+    { "concept_id": "hematocrit", "label": "Hematocrit", "aliases": ["hct", "hematocrit", "haematocrit", "pcv"], "metric": { "unit": "%", "lower": 10, "upper": 75 }, "imperial": { "unit": "%", "lower": 10, "upper": 75 } },
+    { "concept_id": "wbc", "label": "White blood cell count", "aliases": ["wbc", "wcc", "leukocytes", "white_cells", "white_blood_cell"], "metric": { "unit": "x10^9/L", "lower": 0.5, "upper": 100, "notes": "Allows neonatal leukocytosis and severe pathology." }, "imperial": { "unit": "x10^9/L", "lower": 0.5, "upper": 100 } },
+    { "concept_id": "platelet_count", "label": "Platelet count", "aliases": ["plt", "platelets", "platelet_count", "thrombocytes", "plat"], "metric": { "unit": "x10^9/L", "lower": 1, "upper": 5000 }, "imperial": { "unit": "x10^9/L", "lower": 1, "upper": 5000 } },
+    { "concept_id": "creatinine", "label": "Serum creatinine", "aliases": ["creat", "creatinine", "serum_creatinine", "scr", "s_creat", "cr"], "metric": { "unit": "umol/L", "lower": 0.03, "upper": 2000, "notes": "Lower widened to avoid false positives when source data use mg/dL; upper reduced for pediatric physiology." }, "imperial": { "unit": "mg/dL", "lower": 0.03, "upper": 22.6 } },
+    { "concept_id": "egfr", "label": "eGFR", "aliases": ["egfr", "gfr", "ckd_epi", "mdrd", "egfr_ckd"], "metric": { "unit": "mL/min/1.73m^2", "lower": 0, "upper": 300 }, "imperial": { "unit": "mL/min/1.73m^2", "lower": 0, "upper": 300 } },
+    { "concept_id": "sodium", "label": "Serum sodium", "aliases": ["na", "sodium", "serum_na", "s_sodium"], "metric": { "unit": "mmol/L", "lower": 100, "upper": 175 }, "imperial": { "unit": "mmol/L", "lower": 100, "upper": 175 } },
+    { "concept_id": "potassium", "label": "Serum potassium", "aliases": ["k", "potassium", "serum_k", "s_potassium"], "metric": { "unit": "mmol/L", "lower": 1.5, "upper": 9 }, "imperial": { "unit": "mmol/L", "lower": 1.5, "upper": 9 } },
+    { "concept_id": "crp", "label": "C-reactive protein", "aliases": ["crp", "c_reactive_protein", "crp_mg", "hscrp", "hs_crp"], "metric": { "unit": "mg/L", "lower": 0, "upper": 1500 }, "imperial": { "unit": "mg/L", "lower": 0, "upper": 1500 } },
+    { "concept_id": "albumin", "label": "Serum albumin", "aliases": ["alb", "albumin", "serum_albumin", "albumin_serum", "serum_alb", "s_albumin"], "metric": { "unit": "g/L", "lower": 0.5, "upper": 70, "notes": "Lower widened to avoid false positives when source data use g/dL." }, "imperial": { "unit": "g/dL", "lower": 0.5, "upper": 7 } }
+  ]
+}
