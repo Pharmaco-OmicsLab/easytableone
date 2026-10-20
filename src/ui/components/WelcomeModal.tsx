@@ -30,12 +30,12 @@ export default function WelcomeModal() {
         if (e.target === e.currentTarget) close();
       }}
     >
-      <div ref={modalRef} tabIndex={-1} className="relative mx-4 w-full max-w-2xl rounded-xl bg-white p-8 shadow-xl">
+      <div ref={modalRef} tabIndex={-1} className="relative mx-4 max-h-[80vh] w-full max-w-2xl overflow-auto rounded-2xl bg-white p-8 shadow-xl">
         <button
           id="welcome-close-button"
           type="button"
           onClick={close}
-          className="absolute right-4 top-4 text-gray-400 transition-colors hover:text-gray-700"
+          className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-lg text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
           aria-label="Close welcome"
         >
           <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
@@ -69,7 +69,7 @@ export default function WelcomeModal() {
             data-testid="welcome-get-started"
             type="button"
             onClick={close}
-            className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-700"
+            className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
           >
             Get started
           </button>
@@ -80,7 +80,7 @@ export default function WelcomeModal() {
               close();
               setAboutOpen(true);
             }}
-            className="text-sm text-gray-600 underline hover:text-gray-900"
+            className="text-sm text-gray-600 underline hover:text-gray-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
           >
             Learn more about us
           </button>

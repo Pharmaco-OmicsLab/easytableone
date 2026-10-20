@@ -1,7 +1,9 @@
-import type { AnalysisPlan, JournalRuleset, StatisticalResults } from "../types";
+import type { AnalysisPlan, JournalRuleset, StatisticalResults, DataQualityRecord } from "../types";
 import { pyodideRuntimeLabel } from "../runtimeEnvironment";
 import { isFisherLike } from "./testName";
 import { multipleTestingLabels } from "./multipleTestingLabels";
+
+
 
 export function generateMethodsParagraph(
   results: StatisticalResults,
@@ -9,6 +11,8 @@ export function generateMethodsParagraph(
   plan: AnalysisPlan,
   appVersion: string,
   overrides?: any,
+  dataQualityRecords?: DataQualityRecord[],
+  categoricalSummaryLabel = "n (%)",
 ): string {
   const logic = ruleset.EasyTableOne_Ruleset.global_defaults.normality_logic;
 
@@ -42,15 +46,18 @@ export function generateMethodsParagraph(
   }
 
   // Normality criterion
-  const normalitySentence =
+  let normalitySentence =
     `Normality was assessed by Shapiro-Wilk for n ≤ ${logic.large_n_threshold_n} ` +
     `and by skewness/kurtosis criterion (|skew| < ${logic.large_n_skew_max} ` +
     `and |excess kurtosis| < ${logic.large_n_kurt_max}) for n > ${logic.large_n_threshold_n}.`;
+  if (results.perVariable.some((v) => v.test.auxiliary?.normalityMethod === "mixed")) {
+    normalitySentence += " Each group was assessed by the criterion corresponding to its own size.";
+  }
 
   // Categorical tests sentence
   const categoricalSentences: string[] = [];
   if (testsRun.has('Chi-square') || ranFisher) {
-    let cat = 'Categorical variables were summarized as n (%) and compared using ';
+    let cat = `Categorical variables were summarized as ${categoricalSummaryLabel} and compared using `;
     const parts: string[] = [];
     if (testsRun.has('Chi-square')) parts.push('the chi-square test');
     if (ranFisher)
@@ -61,11 +68,21 @@ export function generateMethodsParagraph(
       categoricalSentences.push("For tables larger than 2x2 with low expected counts, Fisher P-values were estimated by seeded Monte Carlo simulation.");
     }
   }
+  if (testsRun.has("Mann-Whitney U (ordinal)") || testsRun.has("Kruskal-Wallis (ordinal)")) {
+    const testLabel = testsRun.has("Mann-Whitney U (ordinal)")
+      ? "Mann-Whitney U"
+      : "Kruskal-Wallis";
+    categoricalSentences.push(
+      `Ordered categorical variables selected by the user were compared using the ${testLabel} test on level ranks.`
+    );
+  }
 
   // SMD mention
-  const smdSentence = plan.userOverrides?.hidePValueColumn
+  const smdPresent = results.perVariable.some((v) => v.smd != null);
+  const hidePValueColumn = Boolean(plan.userOverrides?.hidePValueColumn);
+  const smdSentence = (hidePValueColumn && smdPresent)
     ? 'Between-group baseline differences are displayed as standardized mean differences (SMD) rather than as a P-value column; SMD > 0.1 is conventionally interpreted as imbalanced.'
-    : plan.showSMD
+    : (!hidePValueColumn && smdPresent)
     ? 'Standardized mean differences (SMD) are reported alongside P-values; SMD > 0.1 is conventionally interpreted as imbalanced.'
     : '';
 
@@ -74,9 +91,34 @@ export function generateMethodsParagraph(
     ? `Multiple testing was controlled using the ${multipleTestingLabels[plan.multipleTestingCorrection].method}.`
     : '';
 
-  const postHocSentence = results.perVariable.some((v) => v.postHoc)
+  let postHocSentence = results.perVariable.some((v) => v.postHoc)
     ? "For variables with more than two groups and a significant overall test (using the multiplicity-adjusted omnibus p when a correction was applied), pairwise post-hoc comparisons were performed (Tukey HSD after ANOVA; Dunn's test (Holm-adjusted) after Kruskal-Wallis; Holm-adjusted pairwise chi-square/Fisher for categorical variables)."
     : '';
+  if (postHocSentence && results.perVariable.some((v) => v.postHoc?.caveat)) {
+    postHocSentence += " Where the equal-variance check was not met, Tukey HSD results were flagged for cautious interpretation.";
+  }
+
+  let missingCodesSentence = '';
+  const appliedMissingRecords = (dataQualityRecords ?? []).filter(
+    (r) => r.response === 'applied' && r.finding.checkId.startsWith('missing_code'),
+  );
+  if (appliedMissingRecords.length > 0) {
+    const distinctCodes = Array.from(
+      new Set(appliedMissingRecords.flatMap((r) => r.finding.sampleValues ?? [])),
+    );
+    const formatCodeForExample = (c: string) => {
+      const num = Number(c);
+      return !Number.isNaN(num) ? c : `"${c}"`;
+    };
+    const firstTwo = distinctCodes.slice(0, 2).map(formatCodeForExample);
+    let exampleStr = '';
+    if (firstTwo.length === 1) {
+      exampleStr = `for example ${firstTwo[0]}`;
+    } else if (firstTwo.length >= 2) {
+      exampleStr = `for example ${firstTwo[0]} or ${firstTwo[1]}`;
+    }
+    missingCodesSentence = `Values recorded as missing-data codes (${exampleStr}) were set to missing before analysis at user direction.`;
+  }
 
   // Library + app version
   const libs = results.computeMetadata.libVersions;
@@ -98,12 +140,20 @@ export function generateMethodsParagraph(
       else if (v.test.name === "Mann-Whitney U") methodHumanName = "the Mann-Whitney U test";
       else if (v.test.name === "Kruskal-Wallis") methodHumanName = "the Kruskal-Wallis test";
       else if (v.test.name === "ANOVA") methodHumanName = "one-way ANOVA";
+      else if (v.test.name === "Mann-Whitney U (ordinal)") methodHumanName = "the Mann-Whitney U test on ordered categories";
+      else if (v.test.name === "Kruskal-Wallis (ordinal)") methodHumanName = "the Kruskal-Wallis test on ordered categories";
 
       const hasContradiction = v.test.auxiliary?.assumptionCheckContradicted === "true";
       if (hasContradiction) {
         const isCategorical = v.overallSummary['counts'] !== undefined;
-        const assumptionFlag = isCategorical ? "low-expected-count" : "non-normality";
-        testOverridesSentences.push(`${displayLabel} was compared using ${methodHumanName} at user selection despite a ${assumptionFlag} flag.`);
+        const reason = v.test.auxiliary?.contradictionReason;
+        let flagText = "a non-normality flag";
+        if (reason === "unequal_variance") {
+          flagText = "an unequal-variance flag";
+        } else if (reason === "low_expected_count" || (!reason && isCategorical)) {
+          flagText = "a low-expected-count flag";
+        }
+        testOverridesSentences.push(`${displayLabel} was compared using ${methodHumanName} at user selection despite ${flagText}.`);
       } else {
         testOverridesSentences.push(`${displayLabel} was compared using ${methodHumanName} at user selection.`);
       }
@@ -123,6 +173,7 @@ export function generateMethodsParagraph(
     smdSentence,
     mtcSentence,
     postHocSentence,
+    missingCodesSentence,
     versionSentence,
     ...testOverridesSentences,
     customSentence,

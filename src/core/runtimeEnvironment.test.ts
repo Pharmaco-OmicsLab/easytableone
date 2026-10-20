@@ -1,11 +1,10 @@
 import { describe, expect, it } from "vitest";
-import pyodideLock from "../../public/pyodide-314.0.0a1/pyodide-lock.json";
 import { PYODIDE_VERSION, PYTHON_RUNTIME_VERSION, pyodideRuntimeLabel } from "./runtimeEnvironment";
 
 describe("runtimeEnvironment", () => {
-  it("derives runtime versions from the vendored Pyodide lock file", () => {
-    expect(PYODIDE_VERSION).toBe(pyodideLock.info.version);
-    expect(PYTHON_RUNTIME_VERSION).toBe(pyodideLock.info.python);
+  it("exposes the current Pyodide and CPython versions", () => {
+    expect(PYODIDE_VERSION).toBe("0.30.0.dev0");
+    expect(PYTHON_RUNTIME_VERSION).toBe("3.14.0");
   });
 
   it("reports the real Pyodide release, not the vendored directory token", () => {

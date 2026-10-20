@@ -34,7 +34,7 @@ export function PolishAdvisorPanel() {
   }, [findings.length, userToggledOpen]);
 
   if (!data || !schema) return null;
-  if (findings.length === 0) return null;
+  if (findings.length === 0) return <section id="polish-advisor-panel" className="rounded-[14px] border border-gray-200 bg-white p-[18px] shadow-sm"><h3 className="text-sm font-semibold text-gray-900">Data Polish Advisor</h3><p className="mt-2 text-sm text-gray-600">No suggestions.</p></section>;
 
   const handleApply = (f: PolishFinding) => {
     const key = `${f.detectorId}:${f.variable}`;
@@ -71,7 +71,7 @@ export function PolishAdvisorPanel() {
   return (
     <div
       id="polish-advisor-panel"
-      className="overflow-hidden rounded-lg border border-indigo-100 bg-white shadow-sm transition-all duration-300 hover:shadow-md"
+      className="overflow-hidden rounded-[14px] border border-gray-200 bg-white shadow-sm"
     >
       <button
         type="button"
@@ -80,7 +80,7 @@ export function PolishAdvisorPanel() {
           setOpen((value) => !value);
         }}
         aria-expanded={open}
-        className="flex w-full items-center justify-between gap-3 bg-indigo-50 px-4 py-3 text-left text-indigo-950 hover:bg-indigo-100"
+        className="flex w-full items-center justify-between gap-3 bg-white px-4 py-3 text-left text-gray-900"
       >
         <div className="flex items-center gap-3">
           <span className="rounded-lg bg-white p-2 text-indigo-600 shadow-sm">

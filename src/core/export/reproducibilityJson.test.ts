@@ -1,8 +1,31 @@
 import { describe, expect, it } from "vitest";
 import type { DataQualityRecord } from "../types";
+import { journalRulesets } from "../format/formatTable";
 import { generateReproducibilityJson, toReproducibilityWarning } from "./reproducibilityJson";
 
+const testJournalId = journalRulesets.EasyTableOne_Ruleset.journals[0].journal_id;
+
 describe("toReproducibilityWarning", () => {
+  it("includes only the generated level labels and counts for small-category advisories", () => {
+    const record: DataQualityRecord = {
+      finding: {
+        checkId: "smallCategoryLevel_rare_category",
+        tier: "advisory",
+        category: "quality",
+        variable: "rare_category",
+        title: "Small Category",
+        detail: "Variable 'Rare category': level 'C' has n = 3, fewer than 10 observations. Percentages for this level are unstable and the level may make the table sparse.",
+        remedy: "Consider combining this level with a related one in your source data, or report it with care. This is advisory; the analysis is unchanged.",
+        highlightedValues: ["patient-level-raw-value"],
+      },
+      response: "acknowledged",
+      timestamp: "2026-10-16T00:00:00.000Z",
+    };
+    const warning = toReproducibilityWarning(record);
+    expect(warning.detail).toContain("level 'C' has n = 3");
+    expect(JSON.stringify(warning)).not.toContain("patient-level-raw-value");
+  });
+
   it("keeps D43 metadataOnly but omits detail strings, rows, and values", () => {
     const record: DataQualityRecord = {
       finding: {
@@ -43,7 +66,7 @@ describe("toReproducibilityWarning", () => {
       plan: { groupingVariable: "outcome" } as any,
       schema: { columns: [] } as any,
       results: { computeMetadata: { libVersions: {} }, perVariable: [] } as any,
-      formattedTable: { journal: "Example Journal", rulesetVersion: "test" } as any,
+      formattedTable: { journal: testJournalId, rulesetVersion: "test" } as any,
       appVersion: "test",
       timestamp: "2026-06-29T00:00:00.000Z",
       modelingResults: {
@@ -131,7 +154,7 @@ describe("toReproducibilityWarning", () => {
       plan: { groupingVariable: "outcome" } as any,
       schema: { columns: [] } as any,
       results: { computeMetadata: { libVersions: {} }, perVariable: [] } as any,
-      formattedTable: { journal: "Example Journal", rulesetVersion: "test" } as any,
+      formattedTable: { journal: testJournalId, rulesetVersion: "test" } as any,
       appVersion: "test",
       timestamp: "2026-06-29T00:00:00.000Z",
       modelingResults: {
@@ -165,7 +188,7 @@ describe("toReproducibilityWarning", () => {
       plan: { groupingVariable: "outcome" } as any,
       schema: { columns: [] } as any,
       results: { computeMetadata: { libVersions: {} }, perVariable: [] } as any,
-      formattedTable: { journal: "Example Journal", rulesetVersion: "test" } as any,
+      formattedTable: { journal: testJournalId, rulesetVersion: "test" } as any,
       appVersion: "test",
       timestamp: "2026-06-29T00:00:00.000Z",
       modelingResults: {
@@ -264,7 +287,7 @@ describe("toReproducibilityWarning", () => {
       plan: { groupingVariable: "outcome" } as any,
       schema: { columns: [] } as any,
       results: { computeMetadata: { libVersions: {} }, perVariable: [] } as any,
-      formattedTable: { journal: "Example Journal", rulesetVersion: "test" } as any,
+      formattedTable: { journal: testJournalId, rulesetVersion: "test" } as any,
       appVersion: "test",
       timestamp: "2026-06-29T00:00:00.000Z",
       modelingResults: {
@@ -303,12 +326,40 @@ describe("toReproducibilityWarning", () => {
         }],
       } as any,
       results: { computeMetadata: { libVersions: {} }, perVariable: [] } as any,
-      formattedTable: { journal: "Example Journal", rulesetVersion: "test" } as any,
+      formattedTable: { journal: testJournalId, rulesetVersion: "test" } as any,
       appVersion: "test",
       timestamp: "2026-06-29T00:00:00.000Z",
     });
 
     expect(json).not.toContain("Switch to Continuous");
     expect(json).not.toContain("SpO2");
+  });
+
+  it("includes missing_code_recoded audit entry in reproducibility JSON", () => {
+    const json = generateReproducibilityJson({
+      plan: {
+        groupingVariable: "group",
+        auditLog: [
+          {
+            timestamp: "2026-09-28T00:00:00.000Z",
+            action: "missing_code_recoded",
+            details: { column: "age", codes: "999", count: 3 },
+          },
+        ],
+      } as any,
+      schema: { columns: [] } as any,
+      results: { computeMetadata: { libVersions: {} }, perVariable: [] } as any,
+      formattedTable: { journal: testJournalId, rulesetVersion: "test" } as any,
+      appVersion: "test",
+      timestamp: "2026-09-28T00:00:00.000Z",
+    });
+
+    const parsed = JSON.parse(json);
+    expect(parsed.analysisPlan.auditLog).toBeDefined();
+    expect(
+      parsed.analysisPlan.auditLog.some(
+        (e: any) => e.action === "missing_code_recoded" && e.details?.column === "age",
+      ),
+    ).toBe(true);
   });
 });

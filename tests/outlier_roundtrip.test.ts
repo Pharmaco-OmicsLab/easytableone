@@ -23,7 +23,7 @@ function makeDF(colNames: string[], rows: (number | null)[][]): any {
 describe("Outlier detection ↔ winsorize round-trip", () => {
   beforeAll(async () => {
     await pyodideClient.isReady();
-  }, 60000);
+  });
 
   // ─── Unit: detectOutliers returns empty arrays (not null) when no outliers ───
   it("outlier-free column returns { rowIndices: [], values: [] }, not null", () => {

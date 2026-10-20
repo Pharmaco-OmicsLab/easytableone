@@ -1,0 +1,19 @@
+import { useStore } from "../../../store";
+
+export type ImportPhase = "file" | "study" | "header" | "dictionary";
+export default function ContextAside({ phase }: { phase: ImportPhase }) {
+  const { researchPopulation, unitSystem, studyDesign, setTutorialOpen, explanationDepth } = useStore();
+  return <aside aria-label="Context" className="space-y-4">
+    {phase === "file" && <>
+      <figure className="rounded-xl border border-gray-200 bg-white p-4"><figcaption className="mb-3 text-sm font-semibold text-gray-900">Illustrative output</figcaption><div aria-hidden="true" className="overflow-hidden rounded border border-gray-200 text-xs text-gray-700"><div className="grid grid-cols-3 bg-gray-50 font-semibold"><span className="p-2">Characteristic</span><span className="p-2">Overall</span><span className="p-2">Group</span></div><div className="grid grid-cols-3 border-t border-gray-100"><span className="p-2">Age, years</span><span className="p-2">Mean (SD)</span><span className="p-2">Mean (SD)</span></div><div className="grid grid-cols-3 border-t border-gray-100"><span className="p-2">Sex</span><span className="p-2">n (%)</span><span className="p-2">n (%)</span></div></div></figure>
+      <div className="rounded-xl border border-gray-200 bg-white p-4"><h3 className="text-sm font-semibold text-gray-900">What makes a good input file</h3><ul className="mt-3 space-y-2 text-sm text-gray-600"><li>One row per participant</li><li>One variable per column</li><li>Column names in a single header row</li><li>Blank cells for missing values. Codes like −99 are flagged later in Variable types (Step 2).</li></ul><button type="button" onClick={() => setTutorialOpen(true)} className="mt-3 text-sm font-medium text-blue-700 underline">See the input format guide</button></div>
+      <PrivacyCard />
+    </>}
+    {phase === "study" && <><div className="rounded-xl border border-gray-200 bg-white p-4"><h3 className="text-sm font-semibold text-gray-900">What these settings change</h3><dl className="mt-3 space-y-3 text-sm"><Setting label="Plausibility" value={researchPopulation === "adult" ? "Adult human" : researchPopulation === "pediatric" ? "Pediatric" : "Off"} /><Setting label="Units" value={unitSystem === "metric" ? "SI" : "US customary"} /><Setting label="Baseline comparison" value={studyDesign === "randomized_trial" ? "SMD suggested" : "P value"} /></dl><p className="mt-4 text-sm text-gray-600">Not sure? You can change these settings any time.</p></div><PrivacyCard /></>}
+    {phase === "header" && <div className="rounded-xl border border-gray-200 bg-white p-4"><h3 className="text-sm font-semibold text-gray-900">Check the layout</h3><ul className="mt-3 space-y-2 text-sm text-gray-600"><li>Choose the sheet with participant data.</li><li>Select the row that contains your column names.</li><li>Rows above the header are skipped.</li></ul></div>}
+    {phase === "dictionary" && <div className="rounded-xl border border-gray-200 bg-white p-4"><h3 className="text-sm font-semibold text-gray-900">What a dictionary needs</h3><p className="mt-2 text-sm text-gray-600">A dictionary connects source column names to readable labels, units, and category values. You can skip it and add labels later in Variable types.</p></div>}
+    {phase !== "study" && <p className="px-1 text-xs text-gray-500">{explanationDepth === "deep" ? "Your file stays in this browser while it is read." : "Private by design · files are processed in your browser."}</p>}
+  </aside>;
+}
+function Setting({ label, value }: { label: string; value: string }) { return <div><dt className="text-xs text-gray-500">{label}</dt><dd className="font-medium text-gray-900">{value}</dd></div>; }
+function PrivacyCard() { return <div className="rounded-xl border border-green-200 bg-green-50 p-4"><h3 className="text-sm font-semibold text-green-900">Private by design</h3><p className="mt-1 text-sm text-green-800">Your files are processed locally in your browser.</p></div>; }

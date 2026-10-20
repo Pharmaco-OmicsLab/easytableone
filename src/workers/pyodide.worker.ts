@@ -13,6 +13,7 @@
 
 import { PYODIDE_VERSION } from '../core/runtimeEnvironment';
 import { compareVersions } from '../core/stats/versionCompare';
+import { getWasmBytes } from './memoryStats';
 
 const PYODIDE_DIRECTORY_TOKEN = '314.0.0a1';
 // In production the worker loads from https://easyverse.app/easytableone/assets/…
@@ -154,6 +155,11 @@ self.onmessage = async (event: MessageEvent) => {
 
     if (fnName === 'check_ready') {
       (self as any).postMessage({ id, result: true });
+      return;
+    }
+
+    if (fnName === 'getMemoryStats') {
+      (self as any).postMessage({ id, result: { wasmBytes: getWasmBytes(py) } });
       return;
     }
 

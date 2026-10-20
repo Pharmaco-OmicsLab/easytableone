@@ -1,8 +1,10 @@
+import { SMD_GLOSSARY } from "../../content/smdGuidance";
+
 export const GLOSSARY = {
   "Variable types": "The list of variables in your dataset, with each variable's type and display label.",
   "Data checks": "Data quality checks that look for issues to fix or acknowledge before analysis.",
   EDA: "Exploratory data analysis: summaries and plots used to understand the dataset before final reporting.",
-  SMD: "Standardized mean difference, an effect-size measure often used to describe baseline imbalance.",
+  SMD: SMD_GLOSSARY,
   VIF: "Variance inflation factor, a diagnostic for overlap between predictors in a model.",
   MCAR: "Missing completely at random, meaning missingness does not depend on observed or unobserved values.",
   BH: "Benjamini-Hochberg correction, a false discovery rate method for multiple testing.",

@@ -26,12 +26,12 @@ pnpm validation:report
 
 With `ETO_WRITE_VALIDATION_REPORT=1`, the harness writes transient machine-readable outputs:
 
-- `_materials/validation/tableone_comparison.csv`
-- `_materials/validation/tableone_comparison_summary.json`
+- `validation/tableone/tableone_comparison.csv`
+- `validation/tableone/tableone_comparison_summary.json`
 
-`_materials/validation/` is gitignored. The committed citable deliverable is:
+`validation/tableone/` is gitignored. The committed citable deliverable is:
 
-- `_materials/validation_report/EasyTableOne_tableone_validation.docx`
+- `validation/report/EasyTableOne_tableone_validation.docx`
 
 The CSV is one row per compared statistic with:
 

@@ -322,7 +322,7 @@ export async function exportDataQualityDocx(
   return await Packer.toBlob(doc);
 }
 
-export function exportDataQualityPdf(
+export function buildDataQualityPrintHtml(
   records: DataQualityRecord[],
   schema: Schema | null,
   _plan: AnalysisPlan | null,
@@ -451,6 +451,17 @@ export function exportDataQualityPdf(
     </html>
   `;
 
+  return html;
+}
+
+export function exportDataQualityPdf(
+  records: DataQualityRecord[],
+  schema: Schema | null,
+  plan: AnalysisPlan | null,
+  appVersion = "unknown",
+  options: DataQualityExportOptions = {},
+) {
+  const html = buildDataQualityPrintHtml(records, schema, plan, appVersion, options);
   const printWindow = window.open("", "_blank");
   if (printWindow) {
     printWindow.document.open();

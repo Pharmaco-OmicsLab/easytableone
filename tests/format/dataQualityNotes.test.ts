@@ -207,6 +207,26 @@ describe("Data quality notes formatting (Step 8.5)", () => {
     expect(notes.some(n => n.includes("2 variables have no display label; acknowledged and analysis proceeded."))).toBe(true);
   });
 
+  it("excludes small-category advisories from manuscript table quality notes", () => {
+    const records: DataQualityRecord[] = [{
+      finding: {
+        checkId: "smallCategoryLevel_rare_category",
+        tier: "advisory",
+        category: "quality",
+        variable: "rare_category",
+        title: "Small Category",
+        detail: "Variable 'Rare category': level 'C' has n = 3, fewer than 10 observations. Percentages for this level are unstable and the level may make the table sparse.",
+        remedy: "Consider combining this level with a related one in your source data, or report it with care. This is advisory; the analysis is unchanged.",
+      },
+      response: "acknowledged",
+      timestamp: "2026-10-16T00:00:00Z",
+    }];
+    const result = formatTable(dummyStats, "NEJM", dummyPlan, dummySchema, "3.19.1", records);
+    expect(result.dataQualityNotes).toEqual(["Group sizes: GroupA n=50, GroupB n=50."]);
+    expect(result.dataQualityNotes!.join("\n")).not.toContain("Small Category");
+    expect(result.dataQualityNotes!.join("\n")).not.toContain("level 'C'");
+  });
+
   it("skips Group sizes bullet for ungrouped analyses", () => {
     const ungroupedPlan = { ...dummyPlan, groupingVariable: "" };
     const records: DataQualityRecord[] = [
@@ -255,8 +275,35 @@ describe("Data quality notes formatting (Step 8.5)", () => {
     // We can test that if we pass a ruleset where the section title is null, it returns undefined notes or title
     // But since formatTable uses the internal journalRulesets, we can check a custom journal or modify the imported ruleset
     // directly in code if needed. Actually, let's look at formatTable where we check journalConfig.data_quality_section_title.
-    // If we temporarily modify NEJM configuration to null:
     const nejmConfig = result.dataQualitySectionTitle;
     expect(nejmConfig).toBe("Data quality notes");
+  });
+
+  it("renders missing_code data quality note when applied", () => {
+    const records: DataQualityRecord[] = [
+      {
+        finding: {
+          checkId: "missing_code_GestationalAge",
+          tier: "advisory",
+          category: "quality",
+          variable: "GestationalAge",
+          title: "Missing-value codes recoded",
+          detail: "3 value(s) coded 999 in GestationalAge were treated as missing.",
+          remedy: "",
+          affectedCount: 3,
+          sampleValues: ["999"],
+        },
+        response: "applied",
+        timestamp: "2026-09-28T00:00:00.000Z",
+      },
+    ];
+
+    const result = formatTable(dummyStats, "NEJM", dummyPlan, dummySchema, "1.0", records);
+    expect(result.dataQualityNotes).toBeDefined();
+    expect(
+      result.dataQualityNotes!.some((n) =>
+        n.includes("3 value(s) coded 999 in *Gestational Age* were treated as missing."),
+      ),
+    ).toBe(true);
   });
 });

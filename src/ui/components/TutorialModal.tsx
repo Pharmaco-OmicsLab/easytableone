@@ -2,6 +2,12 @@ import { useCallback, useRef } from "react";
 import { useStore } from "../../store";
 import { useFocusTrap } from "../hooks/useFocusTrap";
 import { GLOSSARY } from "./glossary";
+import {
+  SMD_CAVEAT,
+  SMD_USE_WHEN,
+  SMD_USUALLY_NOT_NEEDED,
+  SMD_WHEN_TO_USE_HEADLINE,
+} from "../../content/smdGuidance";
 
 interface TutorialModalProps {
   onOpenSettings?: () => void;
@@ -69,10 +75,10 @@ export default function TutorialModal({ onOpenSettings }: TutorialModalProps) {
         if (e.target === e.currentTarget) close();
       }}
     >
-      <div ref={modalRef} tabIndex={-1} className="bg-white rounded-xl shadow-xl w-full max-w-4xl mx-4 p-8 relative">
+      <div ref={modalRef} tabIndex={-1} className="max-h-[80vh] overflow-auto bg-white rounded-2xl shadow-xl w-full max-w-4xl mx-4 p-8 relative">
         <button
           onClick={close}
-          className="absolute top-4 right-4 text-gray-400 hover:text-gray-700 transition-colors"
+          className="absolute top-4 right-4 flex h-9 w-9 items-center justify-center rounded-lg text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
           aria-label="Close tutorial"
           id="tutorial-close-button"
         >
@@ -460,8 +466,22 @@ export default function TutorialModal({ onOpenSettings }: TutorialModalProps) {
             </p>
             <h4 className={h4Class}>Show SMD and P-value</h4>
             <p>
-              <strong>Show SMD</strong> checkbox — standardized mean difference, a balance metric used in randomized trial reporting (CONSORT). On by default. Uncheck if your journal prefers
-              P-values only, or if you are reporting an observational study where SMD is not conventional.
+              <strong>Show SMD</strong> checkbox. {SMD_WHEN_TO_USE_HEADLINE}
+            </p>
+            <p className="font-semibold mt-2">Use SMD when:</p>
+            <ul className={listClass}>
+              {SMD_USE_WHEN.map((item, idx) => (
+                <li key={idx}>{item}</li>
+              ))}
+            </ul>
+            <p className="font-semibold mt-2">Usually not needed when:</p>
+            <ul className={listClass}>
+              {SMD_USUALLY_NOT_NEEDED.map((item, idx) => (
+                <li key={idx}>{item}</li>
+              ))}
+            </ul>
+            <p className="mt-2 text-xs text-gray-500 italic">
+              {SMD_CAVEAT}
             </p>
             <p>
               <strong>Show P-value</strong> checkbox — the P-value from the appropriate statistical test for each row. On by default. Some journals discourage P-values in Table 1 for

@@ -14,7 +14,7 @@ export function HtmlPreview({ table }: HtmlPreviewProps) {
     allText.includes("±") || allText.includes("Â±")
       ? ["Mean ± SD", "mean plus/minus standard deviation"]
       : null,
-    allText.includes("[IQR]") || table.rows.some((row) => row.cells.some((cell) => /\d.*\(.+\s(to|â€“|-)\s.+\)/.test(cell)))
+    allText.includes("[IQR]") || table.rows.some((row) => row.cells.some((cell) => /\d.*\(.+\s(to|–|-)\s.+\)/.test(cell)))
       ? ["Median [IQR]", "median [25th-75th percentile]"]
       : null,
     allText.includes("Q1") || allText.includes("Q3")

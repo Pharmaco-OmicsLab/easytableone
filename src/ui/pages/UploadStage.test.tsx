@@ -113,7 +113,7 @@ describe("UploadStage study configuration", () => {
     fireEvent.click(screen.getByRole("button", { name: "Choose a different file" }));
     expect(useStore.getState().file).toBeNull();
     expect(useStore.getState().data).toBeNull();
-    expect(screen.getByText("Drag and drop a CSV or XLSX file here")).toBeDefined();
+    expect(screen.getByText("Drop your spreadsheet here")).toBeDefined();
   });
 
   it("loads the sample workbook through the upload handler and advances to Stage 2", async () => {
@@ -159,6 +159,6 @@ describe("UploadStage study configuration", () => {
     render(<UploadStage />);
 
     expect(screen.getByText(/50,001 rows/)).toBeDefined();
-    expect(screen.getByText(/optional Modeling step/)).toBeDefined();
+    expect(screen.getByText(/may take longer to compute/)).toBeDefined();
   });
 });

@@ -1,5 +1,6 @@
 import type { ColumnType, DataFrame, SchemaColumn } from "../types";
 import { naturalOrdinalCompare } from "../format/levelOrdering";
+import { minOf } from "../utils/arrayExtent";
 
 function isWholeNumber(val: any): boolean {
   if (typeof val === "number") return Number.isInteger(val);
@@ -42,6 +43,19 @@ function isOrderedRangeCategorical(uniqueValues: any[], allNumeric: boolean): bo
   return uniqueValues.every(isRangeOrThresholdLabel);
 }
 
+// All-distinct values are identifier evidence only when the column is nearly
+// complete; sparse measurements can happen to have unique observed values.
+
+export const ID_LIKE_MIN_COVERAGE = 0.9;
+
+
+
+/**
+ * Infers a display/analysis type for each data column without mutating the input. Identifier-like columns and
+ * categorical columns above 20 levels are marked unsupported by default; the Schema stage may let users re-include them.
+ * Date and identifier inference use observed values and name evidence, while numeric and categorical rules preserve
+ * the project's established thresholds (including D103 and the default-exclusion guardrails).
+ */
 export function inferSchema(data: DataFrame): SchemaColumn[] {
   return data.columns.map((col, colIndex) => {
     const nonNullValues = data.rows.map((r) => r[colIndex]).filter((v) => v !== null && v !== "");
@@ -63,9 +77,13 @@ export function inferSchema(data: DataFrame): SchemaColumn[] {
 
     // Check id_like
     const nameIsId = /(^|_)id($|_)/i.test(col.name);
-    // id_like if cardinality == N or name indicates it.
-    if ((cardinality === n && n > 0 && cardinality > 20) || nameIsId) {
-      if (!allNumeric || allWholeNumbers) {
+    // id_like if name indicates it, or all observed values are distinct in a
+    // near-complete column. Signed numeric values are measurements, not IDs.
+    const isNearComplete = n >= data.rows.length * ID_LIKE_MIN_COVERAGE;
+    const minimumNumericValue = allNumeric ? minOf(nonNullValues.map(Number)) : undefined;
+    const isDistinctIdentifierCandidate = cardinality === n && n > 0 && cardinality > 20 && isNearComplete;
+    if (nameIsId || isDistinctIdentifierCandidate) {
+      if (!allNumeric || (allWholeNumbers && (nameIsId || (minimumNumericValue ?? -1) >= 0))) {
         return createSchemaColumn(col.name, "id_like", cardinality, uniqueValues);
       }
     }

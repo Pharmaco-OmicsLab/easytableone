@@ -1,6 +1,12 @@
 import * as XLSX from "xlsx";
 import type { FormattedTable } from "../types";
 
+
+
+/**
+ * Serializes the formatted table and footnotes as an XLSX workbook `Blob` for download.
+ * It exports the supplied display strings as-is and does not recalculate statistics or journal formatting.
+ */
 export function exportXlsx(table: FormattedTable): Blob {
   const rows: Array<Array<string>> = [];
   const headerRefs = table.headerFootnoteRefs ?? {};

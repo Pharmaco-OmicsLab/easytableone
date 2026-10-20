@@ -6,12 +6,42 @@ import { exportDocx } from "../../src/core/export/docx";
 import { exportLatex } from "../../src/core/export/latex";
 import { exportCsv } from "../../src/core/export/csv";
 import { generateReproducibilityJson } from "../../src/core/export/reproducibilityJson";
+import { generateDataQualityReport } from "../../src/core/export/dataQualityReport";
 import { formatTable } from "../../src/core/format/formatTable";
 import { mockStats, dummyPlan, dummySchema } from "./mockStats";
 import { AnalysisPlanSchema, SchemaSchema } from "../../src/core/types";
 import type { StatisticalResults } from "../../src/core/types";
+import journalRulesets from "../../src/core/format/journal_rulesets.json";
 
 describe("Exporters", () => {
+  it("keeps small-category findings in data-quality exports and aggregate JSON warnings", () => {
+    const record = {
+      finding: {
+        checkId: "smallCategoryLevel_rare_category",
+        tier: "advisory" as const,
+        category: "quality" as const,
+        variable: "rare_category",
+        title: "Small Category",
+        detail: "Variable 'Rare category': level 'C' has n = 3, fewer than 10 observations. Percentages for this level are unstable and the level may make the table sparse.",
+        remedy: "Consider combining this level with a related one in your source data, or report it with care. This is advisory; the analysis is unchanged.",
+      },
+      response: "acknowledged" as const,
+      timestamp: "2026-10-16T00:00:00Z",
+    };
+    const report = generateDataQualityReport([record], dummySchema, dummyPlan, "3.19.1", "2026-10-16T00:00:00Z");
+    expect(report).toContain("level 'C' has n = 3");
+    const json = generateReproducibilityJson({
+      plan: dummyPlan,
+      schema: dummySchema,
+      results: mockStats,
+      formattedTable: formatTable(mockStats, "NEJM", dummyPlan, dummySchema, "3.19.1", [record]),
+      appVersion: "3.19.1",
+      dataQualityWarnings: [record],
+    });
+    expect(JSON.parse(json).dataQualityWarnings[0].detail).toContain("level 'C' has n = 3");
+    expect(JSON.parse(json).dataQualityWarnings[0].sampleValues).toBeUndefined();
+  });
+
   it("docx: opens cleanly and contains expected elements", async () => {
     const formatted = formatTable(mockStats, "NEJM", dummyPlan, dummySchema, "1.0.0-test");
     const blob = await exportDocx(formatted, { appVersion: "1.0.0-test" });
@@ -38,7 +68,8 @@ describe("Exporters", () => {
     // Description carries ruleset version
     const appXml = await zip.file('docProps/app.xml')?.async('string') ?? '';
     // Note: docx package may put description in core.xml under dc:description
-    expect(coreXml + appXml).toMatch(/ruleset v1\.4/);
+    // Follow the current shared ruleset version (Rule 1a), not a stale fixture literal.
+    expect(coreXml + appXml).toContain(`ruleset v${journalRulesets.EasyTableOne_Ruleset.version}`);
   });
 
   it("latex: parses cleanly and has booktabs", () => {

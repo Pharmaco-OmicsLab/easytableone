@@ -4,6 +4,10 @@ import type { EducationContext, ExplanationDepth } from "../education/educationT
 
 export type EducationReportDocxChild = Paragraph;
 
+export function hasModelingReport(context: EducationContext): boolean {
+  return Boolean(context.modelingResults?.logistic || context.modelingResults?.ml);
+}
+
 function line(text = ""): Paragraph {
   return new Paragraph({ text, spacing: { after: 80 } });
 }
@@ -19,6 +23,7 @@ export function buildEducationReportMarkdown(context: EducationContext = {}, dep
   const lines = ["# Methods & Rationale Explainer", "", `Explanation depth: ${depth === "deep" ? "detailed" : "concise"}`, ""];
 
   for (const stage of STAGE_ORDER) {
+    if (stage === "modeling" && !hasModelingReport(context)) continue;
     const overview = getStageOverview(stage);
     lines.push(`## ${overview.title}`, "");
     lines.push(`**Purpose:** ${overview.purpose}`, "");
@@ -49,6 +54,7 @@ export function buildEducationReportDocxChildren(context: EducationContext = {},
   ];
 
   for (const stage of STAGE_ORDER) {
+    if (stage === "modeling" && !hasModelingReport(context)) continue;
     const overview = getStageOverview(stage);
     children.push(new Paragraph({ text: overview.title, heading: HeadingLevel.HEADING_3, spacing: { before: 240, after: 120 } }));
     children.push(bullet("Purpose", overview.purpose));

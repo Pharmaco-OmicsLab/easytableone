@@ -1,4 +1,5 @@
 import type { DataFrame, PlotTheme, Schema } from "../core/types";
+import { getWasmBytes } from "./memoryStats";
 import { computeSchemaFingerprint, type EDAResults } from "../core/eda/types";
 import type { DecisionCurve, LogisticResult, LogisticValidation, MlResult, ModelingDataExport, ModelingRegime, ModelingSetup, OddsRatioRow, SubgroupPerformance } from "../core/modeling/types";
 
@@ -328,6 +329,12 @@ function toCamelMlResult(rawResult: any): MlResult {
   };
 }
 
+
+
+/**
+ * Client for the local scientific-Python engine. Browser calls use a dedicated Worker with request IDs;
+ * Node/Vitest uses the in-process Pyodide fallback. Both paths resolve through the same Python function contract.
+ */
 export class PyodideClient {
   private worker: Worker | null = null;
   private callId = 0;
@@ -335,14 +342,22 @@ export class PyodideClient {
     number,
     { resolve: (val: any) => void; reject: (err: any) => void }
   >();
+  private workerError: Error | null = null;
 
   private localPyodideReady: Promise<any> | null = null;
   private localPy: any = null;
 
+  /** Creates a module worker when the browser Worker API is available; otherwise calls use the local fallback. */
   constructor() {
     if (typeof Worker !== "undefined") {
-      this.worker = new Worker(new URL("./pyodide.worker.ts", import.meta.url), { type: "module" });
-      this.worker.onmessage = (e) => {
+      this.createWorker();
+    }
+  }
+
+  private createWorker() {
+    this.worker = new Worker(new URL("./pyodide.worker.ts", import.meta.url), { type: "module" });
+    this.workerError = null;
+    this.worker.onmessage = (e) => {
         const { id, result, error } = e.data;
         const deferred = this.pendingCalls.get(id);
         if (deferred) {
@@ -353,12 +368,32 @@ export class PyodideClient {
           }
           this.pendingCalls.delete(id);
         }
-      };
-    }
+    };
+    const onFailure = (reason: string) => {
+      const error = new Error(`Analysis engine stopped: ${reason}`);
+      this.workerError = error;
+      for (const deferred of this.pendingCalls.values()) deferred.reject(error);
+      this.pendingCalls.clear();
+      this.initializationPromise = null;
+    };
+    this.worker.onerror = (event) => { event.preventDefault(); onFailure(event.message || "worker error"); };
+    this.worker.onmessageerror = () => onFailure("worker message could not be read");
   }
 
+  private rejectPending(error: Error) {
+    for (const deferred of this.pendingCalls.values()) deferred.reject(error);
+    this.pendingCalls.clear();
+  }
+
+
+
+  /**
+   * Calls a named Python function with positional arguments and returns its worker/fallback result.
+   * The worker path correlates concurrent calls by request ID; Python errors reject the matching promise.
+   */
   async call(fnName: string, args: any[] = []): Promise<any> {
     if (this.worker) {
+      if (this.workerError) return Promise.reject(this.workerError);
       const id = ++this.callId;
       return new Promise((resolve, reject) => {
         this.pendingCalls.set(id, { resolve, reject });
@@ -453,13 +488,30 @@ export class PyodideClient {
     }
   }
 
+
+
+  /** Reports available WebAssembly and JavaScript heap byte counts; unsupported measurements are `null`. */
+  async getMemoryStats(): Promise<{ wasmBytes: number | null; jsHeapBytes: number | null }> {
+    const result = this.worker
+      ? await this.call("getMemoryStats")
+      : { wasmBytes: this.localPy ? getWasmBytes(this.localPy) : null };
+    const memory = (performance as Performance & { memory?: { usedJSHeapSize: number } }).memory;
+    return { wasmBytes: result.wasmBytes, jsHeapBytes: memory?.usedJSHeapSize ?? null };
+  }
+
   private initializationPromise: Promise<boolean> | null = null;
 
+
+
+  /**
+   * Checks engine readiness and, when ready, installs the bundled statistics, plot, EDA, and modeling modules once.
+   * Concurrent callers share the initialization promise; the result reports the engine's readiness check.
+   */
   async isReady(): Promise<boolean> {
     if (this.initializationPromise) {
       return this.initializationPromise;
     }
-    this.initializationPromise = (async () => {
+    const initialization = (async () => {
       const ready = await this.call("check_ready");
       if (ready) {
         // Inject the stats code
@@ -475,9 +527,39 @@ export class PyodideClient {
       }
       return ready;
     })();
-    return this.initializationPromise;
+    this.initializationPromise = initialization;
+    try {
+      const ready = await initialization;
+      if (!ready && this.initializationPromise === initialization) this.initializationPromise = null;
+      return ready;
+    } catch (error) {
+      if (this.initializationPromise === initialization) this.initializationPromise = null;
+      throw error;
+    }
   }
 
+  /** Restarts the worker after an initialization failure without changing its message protocol. */
+  async restart(): Promise<boolean> {
+    const error = new Error("Analysis engine stopped: restarting.");
+    this.worker?.terminate();
+    this.rejectPending(error);
+    this.initializationPromise = null;
+    if (typeof Worker !== "undefined") {
+      this.createWorker();
+    } else {
+      this.localPy = null;
+      this.localPyodideReady = null;
+    }
+    return this.isReady();
+  }
+
+
+
+  /**
+   * Installs a wheel from the repository's vendored `extra-wheels` directory in the Node/Vitest fallback only.
+   * Browser-worker calls reject because production wheels are bundled with the engine instead.
+   * @returns The resolved local path of the installed wheel.
+   */
   async loadLocalExtraWheel(wheelFileName: string): Promise<string> {
     await this.isReady();
     if (this.worker || !this.localPy) {
@@ -499,6 +581,12 @@ with zipfile.ZipFile(${JSON.stringify(pyPath)}, 'r') as zf:
     return wheelPath;
   }
 
+
+
+  /**
+   * Renders a small PNG data URL from plot data using the selected plot theme and screen DPI defaults.
+   * A numeric third argument is the legacy width shorthand; otherwise it is a `PlotTheme`.
+   */
   async renderThumbnail(
     data: any,
     plotType: 'histogram' | 'qqplot' | 'barchart' | 'boxplot',
@@ -514,6 +602,12 @@ with zipfile.ZipFile(${JSON.stringify(pyPath)}, 'r') as zf:
     return this.call("render_thumbnail", [JSON.stringify(data), plotType, JSON.stringify(plotTheme), effectiveWidth, effectiveHeight, effectiveDpi]);
   }
 
+
+
+  /**
+   * Renders a publication-size figure as a data URL in PNG, PDF, or SVG format.
+   * Dimensions, DPI, and typography are passed to the local Python plot renderer; a numeric third argument is the legacy width shorthand.
+   */
   async renderPublicationFigure(
     data: any,
     plotType: 'histogram' | 'qqplot' | 'barchart' | 'boxplot',
@@ -531,6 +625,9 @@ with zipfile.ZipFile(${JSON.stringify(pyPath)}, 'r') as zf:
     return this.call("render_publication_figure", [JSON.stringify(data), plotType, JSON.stringify(plotTheme), effectiveWidth, effectiveHeight, effectiveDpi, format, fontScale]);
   }
 
+
+
+  /** Computes EDA locally for the supplied frame/schema, then converts the Python payload to the typed camel-case result. */
   async computeEDA(
     data: DataFrame,
     schema: Schema,
@@ -547,12 +644,18 @@ with zipfile.ZipFile(${JSON.stringify(pyPath)}, 'r') as zf:
     return toCamelEDAResult(rawResult, schema);
   }
 
+
+
+  /** Classifies the modeling regime from dataset metadata without returning row-level data. */
   async detectRegime(meta: Record<string, unknown>): Promise<ModelingRegime> {
     await this.isReady();
     const raw = await this.call("detect_regime", [JSON.stringify(meta)]);
     return toCamelRegime(typeof raw === "string" ? JSON.parse(raw) : proxyToPlain(raw));
   }
 
+
+
+  /** Detects logistic separation for the configured outcome/predictors and returns its typed diagnostic, throwing Python errors. */
   async detectSeparation(data: DataFrame, schema: Schema, setup: ModelingSetup): Promise<NonNullable<ModelingRegime["separation"]>> {
     await this.isReady();
     const raw = await this.call("detect_separation", [
@@ -574,6 +677,9 @@ with zipfile.ZipFile(${JSON.stringify(pyPath)}, 'r') as zf:
     };
   }
 
+
+
+  /** Fits the configured univariate logistic comparisons locally and maps Python rows into the public odds-ratio shape. */
   async computeUnivariateOR(data: DataFrame, schema: Schema, setup: ModelingSetup): Promise<OddsRatioRow[]> {
     await this.isReady();
     const raw = await this.call("univariate_or", [
@@ -589,6 +695,9 @@ with zipfile.ZipFile(${JSON.stringify(pyPath)}, 'r') as zf:
     return toCamelOrRows(parsed);
   }
 
+
+
+  /** Fits the configured logistic model and returns its validated/camel-case result, including regime and interval metadata. */
   async fitLogisticModel(data: DataFrame, schema: Schema, setup: ModelingSetup): Promise<LogisticResult> {
     await this.isReady();
     const raw = await this.call("run_logistic_model", [
@@ -599,6 +708,9 @@ with zipfile.ZipFile(${JSON.stringify(pyPath)}, 'r') as zf:
     return toCamelLogisticResult(raw);
   }
 
+
+
+  /** Runs the configured machine-learning benchmark in the local engine and returns its typed validation results. */
   async runMlBenchmark(data: DataFrame, schema: Schema, setup: ModelingSetup): Promise<MlResult> {
     await this.isReady();
     const raw = await this.call("run_ml_benchmark", [
@@ -609,6 +721,13 @@ with zipfile.ZipFile(${JSON.stringify(pyPath)}, 'r') as zf:
     return toCamelMlResult(raw);
   }
 
+
+
+  /**
+   * Returns the modeling-data export: input matrix and prediction/curve/metric rows produced by the selected setup.
+   * Some returned arrays are observation-level and are intended for the user's explicit modeling-data export; this is not
+   * the aggregate-only reproducibility record governed by D105(a′).
+   */
   async exportModelingData(data: DataFrame, schema: Schema, setup: ModelingSetup): Promise<ModelingDataExport> {
     await this.isReady();
     const raw = await this.call("export_modeling_data", [
@@ -619,6 +738,9 @@ with zipfile.ZipFile(${JSON.stringify(pyPath)}, 'r') as zf:
     return toCamelModelingDataExport(raw);
   }
 
+
+
+  /** Runs logistic validation for the selected setup and maps Python errors to rejected promises and results to the typed contract. */
   async validateLogistic(data: DataFrame, schema: Schema, setup: ModelingSetup): Promise<LogisticValidation> {
     await this.isReady();
     const raw = await this.call("validate_lr", [
@@ -632,4 +754,6 @@ with zipfile.ZipFile(${JSON.stringify(pyPath)}, 'r') as zf:
   }
 }
 
+
+/** Shared application client for all calls to the local Pyodide engine. */
 export const pyodideClient = new PyodideClient();

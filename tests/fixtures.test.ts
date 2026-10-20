@@ -9,6 +9,12 @@ import { runQA } from "../src/core/qa";
 import { inferSchema } from "../src/core/schema/inference";
 
 const MATERIALS_DIR = path.resolve(__dirname, "../_materials");
+const INTERNAL_SAMPLES_DIR = path.join(MATERIALS_DIR, "samples");
+const INTERNAL_FIXTURES = [
+  "babies.csv", "Thyroid_Diff.csv", "Disease_symptom_and_patient_profile_dataset.csv",
+  "CKD_NHANES_2021_2023.csv", "stroke_risk_dataset_v2.csv",
+  "250409_fungi_dataplus_master_file.xlsx",
+];
 
 function getFile(filename: string): File {
   const directPath = path.join(MATERIALS_DIR, filename);
@@ -24,7 +30,8 @@ function getFile(filename: string): File {
   });
 }
 
-describe("Phase 1 Fixture Tests", () => {
+describe.skipIf(INTERNAL_FIXTURES.some((name) => !fs.existsSync(path.join(INTERNAL_SAMPLES_DIR, name))))(
+  `Phase 1 Fixture Tests (internal fixtures: ${INTERNAL_FIXTURES.join(", ")})`, () => {
   it("a) babies.csv schema inference", async () => {
     const file = getFile("babies.csv");
     const df = await parseCSV(file);
@@ -148,6 +155,9 @@ describe("Phase 1 Fixture Tests", () => {
     }
   });
 
+});
+
+describe("QA fixture-free checks", () => {
   it("does not emit the legacy raw date-column blocking error from runQA", async () => {
     const file = new File(["id,dob\n1,1990-01-01\n2,1992-05-05\n3,1985-12-12\n"], "test.csv", {
       type: "text/csv",

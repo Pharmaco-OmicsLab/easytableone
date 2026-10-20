@@ -6,9 +6,11 @@ import { HtmlPreview } from "../../core/export/htmlPreview";
 import { exportLatex } from "../../core/export/latex";
 import { exportXlsx } from "../../core/export/xlsx";
 import { generateReproducibilityJson } from "../../core/export/reproducibilityJson";
+import { toAggregateResults } from "../../core/export/aggregateOnly";
 import { generateAnalysisHistory } from "../../core/export/analysisHistory";
 import { generateDataQualityReport } from "../../core/export/dataQualityReport";
 import { generateEDAReportHtml, generateEdaSummaryMarkdown } from "../../core/export/edaReport";
+import { renderEdaReportChartPngs } from "../../core/export/edaReportCharts";
 import { vegaLiteSpecToPng } from "../../core/export/vegaRender";
 import { buildModelingDataZip } from "../../core/export/modelingData";
 import { buildModelingReportMarkdown, exportModelingReportDocx } from "../../core/export/modelingReport";
@@ -18,7 +20,7 @@ import { renderUnifiedReportHtml } from "../../core/export/reportHtml";
 import { buildUnifiedReport, type ReportAsset, type UnifiedReportContext, type UnifiedReportSections } from "../../core/export/unifiedReport";
 import { APP_VERSION } from "../../core/appVersion";
 import type { ExplanationDepth } from "../../core/education/educationTypes";
-import { exportDataQualityDocx, exportDataQualityPdf } from "../../core/export/dataQualityExport";
+import { buildDataQualityPrintHtml, exportDataQualityDocx, exportDataQualityPdf } from "../../core/export/dataQualityExport";
 import { formatTable, journalRulesets } from "../../core/format/formatTable";
 import { getEffectiveJournalSettings } from "../../core/format/getEffectiveJournalSettings";
 import { generateDiagnosticsCsv } from "../../core/format/diagnosticsCsv";
@@ -26,13 +28,35 @@ import { buildResultsSummary } from "../../core/format/resultsSummary";
 import { getColumnDisplayLabel, resolveLevelLabel, resolvePlotDataLabels } from "../../core/format/columnLabel";
 import type { LogisticResult, MlResult } from "../../core/modeling/types";
 import { buildDecisionCurveSpec, buildMlCalibrationSpec, buildMlImportanceSpec, buildMlRocSpec } from "../../core/modeling/vizSpecs";
-import { JournalStyleCard } from "../components/JournalStyleCard";
 import JournalOverridePanel from "../components/JournalOverridePanel";
 import { useStore } from "../../store";
 import { sha256Hex } from "../../lib/hash";
 import { pyodideClient } from "../../workers/pyodide.client";
 import AboutThisStep from "../components/AboutThisStep";
 import EmptyState from "../components/EmptyState";
+import StepActionBar from "../layout/StepActionBar";
+import { useToast } from "../layout/Toast";
+
+export function getUniqueZipFilename(filename: string, usedNames: Set<string>): string {
+  if (!usedNames.has(filename)) {
+    usedNames.add(filename);
+    return filename;
+  }
+  const extensionIndex = filename.lastIndexOf(".");
+  const stem = extensionIndex > 0 ? filename.slice(0, extensionIndex) : filename;
+  const extension = extensionIndex > 0 ? filename.slice(extensionIndex) : "";
+  let suffix = 2;
+  let candidate = `${stem} (${suffix})${extension}`;
+  while (usedNames.has(candidate)) {
+    suffix += 1;
+    candidate = `${stem} (${suffix})${extension}`;
+  }
+  usedNames.add(candidate);
+  return candidate;
+}
+
+const cardCls = "rounded-xl border border-gray-200 bg-white p-5 shadow-sm";
+const smallBtn = "rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 shadow-sm hover:border-blue-300 hover:bg-blue-50 disabled:opacity-50";
 
 function CollapsibleSection({
   title,
@@ -73,11 +97,19 @@ function CollapsibleSection({
   );
 }
 
-export default function FormatExportStage() {
+export default function FormatExportStage({ engineReady = true, engineError = false }: { engineReady?: boolean; engineError?: boolean }) {
+  const toast = useToast();
+  const [hasDownloaded, setHasDownloaded] = useState(false);
+  const exportErrorHandlerRef = useRef<((message: string) => void) | null>(null);
+  const reportExportError = (message: string) => {
+    if (exportErrorHandlerRef.current) exportErrorHandlerRef.current(message);
+    else toast(message);
+  };
   const {
     stats,
     journalId,
     setJournalId,
+    setPlan,
     plan,
     schema,
     data,
@@ -92,10 +124,6 @@ export default function FormatExportStage() {
     setStage,
   } = useStore();
 
-  const journalConfig = useMemo(
-    () => journalRulesets.EasyTableOne_Ruleset.journals.find((j) => j.journal_id === journalId),
-    [journalId]
-  );
   const effectiveJournalConfig = useMemo(
     () => getEffectiveJournalSettings(journalId, plan?.userOverrides),
     [journalId, plan?.userOverrides]
@@ -118,13 +146,24 @@ export default function FormatExportStage() {
 
   /** Trigger a file download in the browser. */
   function triggerDownload(blob: Blob, filename: string) {
+    if (downloadCaptureRef.current) {
+      downloadCaptureRef.current.push({ blob, filename });
+      return;
+    }
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
     a.download = filename;
     a.click();
-    URL.revokeObjectURL(url);
+    setHasDownloaded(true);
+    const extension = filename.split(".").pop()?.toUpperCase() ?? "FILE";
+    toast(`Downloaded: ${filename} (${extension})`);
+    // Safari/WebKit may not consume a download initiated by a second click if its URL is revoked
+    // synchronously in the same user gesture.
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
+
+  const downloadCaptureRef = useRef<Array<{ blob: Blob; filename: string }> | null>(null);
 
   const [isExporting, setIsExporting] = useState(false);
   const [includePlotsInDocx, setIncludePlotsInDocx] = useState(false);
@@ -153,6 +192,12 @@ export default function FormatExportStage() {
   } | null>(null);
   const modelingFigureAssetsCacheRef = useRef<{ ml: MlResult | null | undefined; logistic: LogisticResult | null | undefined; assets: ReportAsset[] } | null>(null);
   const hasModelingReport = !!(modelingResults?.logistic || modelingResults?.ml);
+  const overrideCount = plan?.userOverrides
+    ? Object.entries(plan.userOverrides).reduce<number>((count, [, value]) => {
+      if (value == null) return count;
+      return count + (typeof value === "object" ? Object.keys(value).length : 1);
+    }, 0)
+    : 0;
 
   useEffect(() => {
     setEducationExportDepth(explanationDepth);
@@ -221,7 +266,7 @@ export default function FormatExportStage() {
       triggerDownload(blob, `EasyTableOne_${journalId}_${Date.now()}.docx`);
     } catch (e) {
       console.error(e);
-      alert("Failed to export DOCX.");
+      reportExportError("Failed to export DOCX.");
     } finally {
       setIsExporting(false);
     }
@@ -247,7 +292,7 @@ export default function FormatExportStage() {
 
   const handleDownloadReproJson = async () => {
     if (!plan || !schema || !stats || !data || !formattedTable) {
-      alert("Missing data to generate reproducibility JSON.");
+      reportExportError("Missing data to generate reproducibility JSON.");
       return;
     }
 
@@ -267,15 +312,19 @@ export default function FormatExportStage() {
     triggerDownload(new Blob([jsonStr], { type: "application/json;charset=utf-8;" }), "reproducibility.json");
   };
 
-  /** Step 5 — Diagnostics CSV + JSON */
-  const handleDownloadDiagnostics = () => {
+  /** Step 5 — Diagnostics CSV */
+  const handleDownloadDiagnosticsCsv = () => {
     if (!stats) return;
-    // CSV
     const csvStr = generateDiagnosticsCsv(stats, schema ?? undefined, plan?.groupingVariable, journalId, plan?.userOverrides);
     triggerDownload(new Blob([csvStr], { type: "text/csv;charset=utf-8;" }), "diagnostics.csv");
-    // JSON
+  };
+
+  /** Step 5 — Diagnostics JSON */
+  const handleDownloadDiagnosticsJson = () => {
+    if (!stats) return;
     const groupingSchemaCol = schema?.columns.find(c => c.name === plan?.groupingVariable);
-    const resolvedPerVariable = stats.perVariable.map(v => {
+    // Phase 51 R1 (D105a): exported diagnostics are aggregate-only (no plotData).
+    const resolvedPerVariable = toAggregateResults(stats).perVariable.map(v => {
       const varSchemaCol = schema?.columns.find(c => c.name === v.variable);
       const resolvedSummaryByGroup: Record<string, any> = {};
       for (const [groupCode, groupSummary] of Object.entries(v.summaryByGroup)) {
@@ -357,9 +406,12 @@ export default function FormatExportStage() {
     triggerDownload(new Blob([reportStr], { type: "text/markdown;charset=utf-8;" }), "data_quality_report.md");
   };
 
-  const handleDownloadEdaReport = () => {
+  const handleDownloadEdaReport = async () => {
     if (!edaResults) return;
-    const html = generateEDAReportHtml(edaResults, schema, APP_VERSION, new Date().toISOString());
+    const { correlationChartPng, missingnessChartPng } = await renderEdaReportChartPngs(edaResults, schema);
+    const html = generateEDAReportHtml(
+      edaResults, schema, APP_VERSION, new Date().toISOString(), correlationChartPng, missingnessChartPng,
+    );
     triggerDownload(new Blob([html], { type: "text/html;charset=utf-8;" }), "eda_report.html");
   };
 
@@ -387,7 +439,7 @@ export default function FormatExportStage() {
       triggerDownload(blob, "methods_summary.docx");
     } catch (e) {
       console.error(e);
-      alert("Failed to export methods summary DOCX.");
+      reportExportError("Failed to export methods summary DOCX.");
     }
   };
 
@@ -402,7 +454,7 @@ export default function FormatExportStage() {
       triggerDownload(blob, "methods_rationale_explainer.docx");
     } catch (e) {
       console.error(e);
-      alert("Failed to export methods & rationale explainer DOCX.");
+      reportExportError("Failed to export methods & rationale explainer DOCX.");
     }
   };
 
@@ -420,7 +472,7 @@ export default function FormatExportStage() {
       triggerDownload(blob, "modeling_report.docx");
     } catch (e) {
       console.error(e);
-      alert("Failed to export modeling report DOCX.");
+      reportExportError("Failed to export modeling report DOCX.");
     }
   };
 
@@ -433,7 +485,7 @@ export default function FormatExportStage() {
       triggerDownload(blob, `modeling_data_${Date.now()}.zip`);
     } catch (e) {
       console.error(e);
-      alert(e instanceof Error ? e.message : "Failed to export modeling data.");
+      reportExportError(e instanceof Error ? e.message : "Failed to export modeling data.");
     } finally {
       setIsExportingModelingData(false);
     }
@@ -563,7 +615,7 @@ export default function FormatExportStage() {
       );
     } catch (e) {
       console.error(e);
-      alert(e instanceof Error ? e.message : "Failed to export full report HTML.");
+      reportExportError(e instanceof Error ? e.message : "Failed to export full report HTML.");
     } finally {
       setIsExportingReport(false);
     }
@@ -587,7 +639,7 @@ export default function FormatExportStage() {
       triggerDownload(blob, `easytableone_report_source_${reportTimestampForFilename(timestamp)}.zip`);
     } catch (e) {
       console.error(e);
-      alert(e instanceof Error ? e.message : "Failed to export full report source.");
+      reportExportError(e instanceof Error ? e.message : "Failed to export full report source.");
     } finally {
       setIsExportingReport(false);
     }
@@ -601,7 +653,7 @@ export default function FormatExportStage() {
       const html = await buildUnifiedReportHtml(timestamp);
       const printWindow = window.open("", "_blank");
       if (!printWindow) {
-        alert("Could not open the print view. Please allow pop-ups for this site and try again.");
+        reportExportError("Could not open the print view. Please allow pop-ups for this site and try again.");
         return;
       }
       printWindow.document.open();
@@ -611,7 +663,7 @@ export default function FormatExportStage() {
       printWindow.document.close();
     } catch (e) {
       console.error(e);
-      alert(e instanceof Error ? e.message : "Failed to open the PDF/print view.");
+      reportExportError(e instanceof Error ? e.message : "Failed to open the PDF/print view.");
     } finally {
       setIsExportingReport(false);
     }
@@ -626,13 +678,19 @@ export default function FormatExportStage() {
       triggerDownload(blob, "data_quality_report.docx");
     } catch (e) {
       console.error(e);
-      alert("Failed to export Data Quality DOCX.");
+      reportExportError("Failed to export Data Quality DOCX.");
     }
   };
 
   const handleDownloadDataQualityPdf = () => {
     if (!plan || !schema) return;
     exportDataQualityPdf(dataQualityRecords, schema, plan, APP_VERSION, { qaReport, edaResults: includeEdaReport ? edaResults : null });
+  };
+
+  const handleDownloadDataQualityPrintHtml = () => {
+    if (!plan || !schema) return;
+    const html = buildDataQualityPrintHtml(dataQualityRecords, schema, plan, APP_VERSION, { qaReport, edaResults: includeEdaReport ? edaResults : null });
+    triggerDownload(new Blob([html], { type: "text/html;charset=utf-8;" }), "data_quality_report_print.html");
   };
 
   const [isDownloadingAll, setIsDownloadingAll] = useState(false);
@@ -729,7 +787,7 @@ export default function FormatExportStage() {
       triggerDownload(blob, `figures_${journalId}_${Date.now()}.zip`);
     } catch (e) {
       console.error(e);
-      alert(e instanceof Error ? e.message : "Failed to export figures.");
+      reportExportError(e instanceof Error ? e.message : "Failed to export figures.");
     } finally {
       setIsExportingFigures(false);
     }
@@ -738,43 +796,84 @@ export default function FormatExportStage() {
   const handleDownloadAll = async () => {
     if (!formattedTable || !stats) return;
     setIsDownloadingAll(true);
+    const captured: Array<{ blob: Blob; filename: string }> = [];
+    const errors: Array<{ label: string; message: string }> = [];
+    const collect = async (label: string, action: () => unknown | Promise<unknown>) => {
+      const before = captured.length;
+      const errorCount = errors.length;
+      downloadCaptureRef.current = captured;
+      exportErrorHandlerRef.current = (message) => errors.push({ label, message });
+      try {
+        await action();
+        if (captured.length === before && errors.length === errorCount) errors.push({ label, message: "Export did not produce a file." });
+      } catch (error) {
+        errors.push({ label, message: error instanceof Error ? error.message : String(error) });
+      } finally {
+        downloadCaptureRef.current = null;
+        exportErrorHandlerRef.current = null;
+      }
+    };
     try {
-      // 1. DOCX (with or without plots per checkbox)
-      await handleDownloadDocx();
-      // 2. CSV
-      handleDownloadCsv();
-      // 3. Excel
-      handleDownloadXlsx();
-      // 4. LaTeX
-      handleDownloadLatex();
-      // 5. Reproducibility JSON
-      await handleDownloadReproJson();
-      // 6. Diagnostics
-      handleDownloadDiagnostics();
-      // 7. Analysis history
-      handleDownloadAnalysisHistory();
-      // 8. Data quality report (md, docx, pdf)
-      handleDownloadDataQualityReport();
-      await handleDownloadDataQualityDocx();
-      handleDownloadDataQualityPdf();
+      await collect("Table 1 DOCX", handleDownloadDocx);
+      await collect("Table 1 CSV", handleDownloadCsv);
+      await collect("Table 1 XLSX", handleDownloadXlsx);
+      await collect("Table 1 LaTeX", handleDownloadLatex);
+      await collect("Full report HTML", handleDownloadUnifiedReportHtml);
+      await collect("Full report source", handleDownloadUnifiedReportSource);
+      await collect("Reproducibility JSON", handleDownloadReproJson);
+      await collect("Diagnostics CSV", handleDownloadDiagnosticsCsv);
+      await collect("Diagnostics JSON", handleDownloadDiagnosticsJson);
+      await collect("Analysis history", handleDownloadAnalysisHistory);
+      await collect("Data quality report", handleDownloadDataQualityReport);
+      await collect("Data quality DOCX", handleDownloadDataQualityDocx);
+      await collect("Data quality print HTML", handleDownloadDataQualityPrintHtml);
       if (includeEdaReport) {
-        handleDownloadEdaReport();
-        handleDownloadEdaSummary();
+        await collect("EDA report", handleDownloadEdaReport);
+        await collect("EDA summary", handleDownloadEdaSummary);
       }
       if (hasModelingReport) {
-        handleDownloadModelingReportMarkdown();
-        await handleDownloadModelingReportDocx();
-        await handleDownloadModelingData();
+        await collect("Modeling report", handleDownloadModelingReportMarkdown);
+        await collect("Modeling report DOCX", handleDownloadModelingReportDocx);
+        await collect("Modeling data", handleDownloadModelingData);
       }
-      handleDownloadResultsSummary();
-      handleDownloadMethodsSummary();
-      await handleDownloadMethodsSummaryDocx();
-      handleDownloadEducationReportMarkdown();
-      await handleDownloadEducationReportDocx();
+      await collect("Results summary", handleDownloadResultsSummary);
+      await collect("Methods summary", handleDownloadMethodsSummary);
+      await collect("Methods summary DOCX", handleDownloadMethodsSummaryDocx);
+      await collect("Methods & rationale", handleDownloadEducationReportMarkdown);
+      await collect("Methods & rationale DOCX", handleDownloadEducationReportDocx);
+      if (figureExportItems.length > 0) await collect("Figures", handleDownloadFiguresZip);
+
+      const stamp = new Date().toISOString();
+      const zip = new JSZip();
+      const usedNames = new Set<string>(["MANIFEST.txt"]);
+      const renamed: Array<{ original: string; renamed: string }> = [];
+      const zipEntries: Array<{ original: string; filename: string }> = [];
+      for (const file of captured) {
+        const filename = getUniqueZipFilename(file.filename, usedNames);
+        if (filename !== file.filename) renamed.push({ original: file.filename, renamed: filename });
+        zip.file(filename, file.blob);
+        zipEntries.push({ original: file.filename, filename });
+      }
+      const manifest = [
+        `EasyTableOne ${APP_VERSION}`,
+        `Ruleset version: ${formattedTable.rulesetVersion ?? journalRulesets.EasyTableOne_Ruleset.version}`,
+        `Created: ${stamp}`,
+        "",
+        "Files:",
+        ...zipEntries.map((entry) => `- ${entry.filename}`),
+        ...(renamed.length ? ["", "Renamed:", ...renamed.map((item) => `- ${item.original} -> ${item.renamed}`)] : []),
+        ...(errors.length ? ["", "Failed:", ...errors.map((failure) => `- ${failure.label}: ${failure.message}`)] : []),
+      ].join("\n");
+      zip.file("MANIFEST.txt", manifest);
+      const blob = await zip.generateAsync({ type: "blob", compression: "DEFLATE" });
+      triggerDownload(blob, `EasyTableOne_${journalId}_${stamp.replace(/[:.]/g, "-")}.zip`);
+      if (errors.length) toast(`${errors.length} file(s) could not be created — see MANIFEST.txt`);
+      else toast("Downloaded: Everything (.zip)");
     } catch (e) {
       console.error(e);
-      alert("Download All encountered an error. Some files may not have been downloaded.");
+      toast(e instanceof Error ? e.message : "Download All failed.");
     } finally {
+      downloadCaptureRef.current = null;
       setIsDownloadingAll(false);
     }
   };
@@ -795,39 +894,147 @@ export default function FormatExportStage() {
     <div className="space-y-6">
       <AboutThisStep stage="export" />
       <h2 className="text-2xl font-bold text-gray-900">Format &amp; Export</h2>
+      <div className="grid items-start gap-4 min-[1201px]:grid-cols-[340px_minmax(0,1fr)]">
+      <div className="space-y-4" data-testid="export-left-column">
+      <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+        <h3 className="text-lg font-semibold text-gray-900">Journal style</h3>
+        <p className="mb-3 mt-1 text-sm text-gray-600">Presets set number, P-value and notation rules for the journal you are targeting.</p>
+        <div role="radiogroup" aria-label="Journal style" className="grid gap-2 sm:grid-cols-2 min-[1201px]:grid-cols-1">
+          {journalRulesets.EasyTableOne_Ruleset.journals.map((j) => {
+            const pFormat = j.p_value_formatting;
+            const iqr = j.summary_statistics.iqr_delimiter;
+            const summary = j.journal_id === "JAMA" && pFormat.leading_zero === false
+              ? "P values without a leading zero"
+              : j.journal_id === "LANCET" && pFormat.decimal_separator === "·"
+                ? `Middle-dot decimals; ${pFormat.threshold_low} floor`
+                : `${iqr === " to " ? "Median with ‘to’ between quartiles; " : "IQR delimiter “" + iqr + "”; "}${pFormat.threshold_low} P-value floor`;
+            return (
+              <label key={j.journal_id} className={`block cursor-pointer rounded-xl border px-3 py-2 hover:border-gray-300 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:ring-1 has-[:checked]:ring-inset has-[:checked]:ring-blue-600 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-blue-600 has-[:focus-visible]:outline-offset-2 ${journalId === j.journal_id ? "border-blue-600 bg-blue-50" : "border-gray-200 bg-white"}`}>
+                <input className="sr-only" type="radio" name="journal-style" value={j.journal_id} checked={journalId === j.journal_id} onChange={() => { setJournalId(j.journal_id); setPlan({ ...plan, userOverrides: undefined }); }} />
+                <span className="block text-sm font-semibold text-gray-900">{j.journal_id === "GENERIC" ? "Standard / Generic" : j.journal_id === "NEJM" ? "NEJM" : j.journal_id === "JAMA" ? "JAMA" : j.display_name}</span>
+                <span className="block text-xs text-gray-600">{summary}</span>
+              </label>
+            );
+          })}
+        </div>
+        <p className="mt-3 text-xs text-gray-600">Your choices apply to every Table 1 download. The exact P-value rules come from the selected journal ruleset.</p>
+      </section>
 
-      <CollapsibleSection title="Select Journal Style">
-        <label htmlFor="journal-select" className="block text-sm font-medium text-gray-700 mb-2">
-          Select Journal Style
-        </label>
-        <select
-          id="journal-select"
-          value={journalId}
-          onChange={(e) => setJournalId(e.target.value)}
-          className="mt-1 block w-64 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm border p-2"
-        >
-          {journalRulesets.EasyTableOne_Ruleset.journals.map((j) => (
-            <option key={j.journal_id} value={j.journal_id}>
-              {j.display_name}
-            </option>
-          ))}
-        </select>
-
-        {/* Step 9 — JournalStyleCard */}
-        {journalConfig && (
-          <div className="mt-4">
-            <JournalStyleCard config={journalConfig} />
+      <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm" data-testid="what-to-include">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-lg font-semibold text-gray-900">What to include</h3>
+          <button type="button" onClick={toggleFullReportOptions} className={smallBtn}>
+            {allEnabledFullReportSelected ? "Clear all" : "Select all"}
+          </button>
+        </div>
+        <h4 className="mt-3 text-sm font-semibold text-gray-900">Full report contents</h4>
+        <div className="mt-2 grid gap-2 text-sm text-gray-800">
+          <label className="flex items-start gap-2">
+            <input type="checkbox" checked disabled className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 disabled:opacity-70" />
+            <span>Table 1 section</span>
+          </label>
+          <label className="flex items-start gap-2">
+            <input
+              type="checkbox"
+              checked={includeDataQualityFullReport}
+              onChange={(e) => setIncludeDataQualityFullReport(e.target.checked)}
+              disabled={!schema || !plan}
+              className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-600 disabled:opacity-50"
+            />
+            <span>Data quality section</span>
+          </label>
+          <label className="flex items-start gap-2">
+            <input
+              type="checkbox"
+              checked={includeEdaFullReport}
+              onChange={(e) => setIncludeEdaFullReport(e.target.checked)}
+              disabled={!edaResults}
+              className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-600 disabled:opacity-50"
+            />
+            <span>EDA section</span>
+          </label>
+          <label className="flex items-start gap-2">
+            <input
+              type="checkbox"
+              checked={includeModelingFullReport && hasModelingReport}
+              onChange={(e) => setIncludeModelingFullReport(e.target.checked)}
+              disabled={!hasModelingReport}
+              className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-600 disabled:opacity-50"
+            />
+            <span>Modeling section</span>
+          </label>
+          <label className="flex items-start gap-2">
+            <input
+              type="checkbox"
+              checked={includeMethodsSummaryFullReport}
+              onChange={(e) => setIncludeMethodsSummaryFullReport(e.target.checked)}
+              disabled={!stats || !schema || !plan}
+              className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-600 disabled:opacity-50"
+            />
+            <span>Methods summary section</span>
+          </label>
+          <label className="flex items-start gap-2">
+            <input
+              type="checkbox"
+              checked={includeEducationFullReport}
+              onChange={(e) => setIncludeEducationFullReport(e.target.checked)}
+              className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-600"
+            />
+            <span>Methods &amp; rationale section</span>
+          </label>
+        </div>
+        {figureExportItems.length > 0 && (
+          <div className="mt-4 border-t border-gray-200 pt-3">
+            <h4 className="text-sm font-semibold text-gray-900">Figure export</h4>
+            <div className="mt-2 flex flex-wrap items-end gap-3">
+              <label className="flex flex-col text-xs font-medium text-gray-700">
+                Format
+                <select
+                  value={figureFormat}
+                  onChange={(e) => setFigureFormat(e.target.value as "png" | "pdf" | "svg")}
+                  className="mt-1 rounded border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900"
+                >
+                  <option value="png">PNG</option>
+                  <option value="pdf">PDF</option>
+                  <option value="svg">SVG</option>
+                </select>
+              </label>
+              <label className="flex flex-col text-xs font-medium text-gray-700">
+                DPI
+                <select
+                  value={figureDpi}
+                  onChange={(e) => setFigureDpi(Number(e.target.value))}
+                  className="mt-1 rounded border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900"
+                >
+                  {[150, 300, 600].map((dpi) => (
+                    <option key={dpi} value={dpi}>{dpi}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex flex-col text-xs font-medium text-gray-700">
+                Font scale
+                <input
+                  type="number"
+                  min="0.6"
+                  max="2"
+                  step="0.1"
+                  value={figureFontScale}
+                  onChange={(e) => setFigureFontScale(Number(e.target.value))}
+                  className="mt-1 w-20 rounded border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900"
+                />
+              </label>
+            </div>
+            <p className="mt-2 text-xs text-gray-600">{figureExportItems.length} diagnostic figure files will be rendered using the active journal theme.</p>
           </div>
         )}
-      </CollapsibleSection>
+      </section>
+      </div>
 
-      <CollapsibleSection title="Journal Formatting Overrides">
-        <JournalOverridePanel hideHeader />
-      </CollapsibleSection>
+      <div className="order-first min-w-0 space-y-4 min-[1201px]:order-none">
 
       <CollapsibleSection title="Live Preview">
         {formattedTable ? (
-          <div className="border border-gray-200 p-4 rounded bg-white">
+          <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white p-4 text-black [&_table]:w-full [&_table]:text-xs [&_td]:px-2 [&_th]:px-2">
             <HtmlPreview table={formattedTable} />
             {includePlotsInDocx && (
               <div className="mt-6 border border-dashed border-gray-300 bg-gray-50 p-4 text-sm text-gray-700">
@@ -870,478 +1077,194 @@ export default function FormatExportStage() {
 
       {resultsSummary && (
         <CollapsibleSection title="Results Summary">
+          <div className="mb-3 flex flex-wrap gap-2 text-xs text-gray-700" data-testid="results-summary-stats">
+            <span className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-0.5">Journal style: {journalId === "GENERIC" ? "Standard / Generic" : journalId}</span>
+            {figureExportItems.length > 0 && <span className="rounded-full border border-gray-200 bg-gray-50 px-2.5 py-0.5">{figureExportItems.length} figure files</span>}
+          </div>
           <p className="text-sm text-gray-700 leading-relaxed">{resultsSummary}</p>
         </CollapsibleSection>
       )}
+      </div>
+      <details className="col-span-full rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+        <summary className="cursor-pointer text-sm font-semibold text-gray-900">Override individual settings{overrideCount > 0 && <span className="ml-2 rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs text-blue-700">{overrideCount} changed</span>}</summary>
+        <div className="mt-4"><JournalOverridePanel hideHeader /></div>
+      </details>
+      </div>
 
-      <CollapsibleSection title="Export Options">
-        <div className="mb-5 max-w-3xl rounded-lg border border-emerald-100 bg-emerald-50 p-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h4 className="text-sm font-semibold text-emerald-950">Full report (single document)</h4>
-            <button
-              type="button"
-              onClick={toggleFullReportOptions}
-              className="rounded border border-emerald-200 bg-white px-2 py-1 text-xs font-semibold text-emerald-950 hover:bg-emerald-50"
-            >
-              {allEnabledFullReportSelected ? "Clear all" : "Select all"}
-            </button>
+      <section aria-labelledby="downloads-heading" className="space-y-4" data-testid="downloads-section">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 id="downloads-heading" className="text-lg font-semibold text-gray-900">Downloads</h3>
+            <p className="mt-1 text-sm text-gray-600">Download All bundles every file here that applies to this analysis into one .zip. Modeling files are included only if Step 6 ran; EDA and full-report options follow their checkboxes.</p>
           </div>
-          <div className="mt-3 grid gap-2 text-sm text-emerald-950 sm:grid-cols-2">
-            <label className="flex items-start gap-2">
-              <input
-                type="checkbox"
-                checked
-                disabled
-                className="mt-1 h-4 w-4 rounded border-gray-300 text-emerald-700 disabled:opacity-70"
-              />
-              <span>Table 1 section</span>
-            </label>
-            <label className="flex items-start gap-2">
-              <input
-                type="checkbox"
-                checked={includeDataQualityFullReport}
-                onChange={(e) => setIncludeDataQualityFullReport(e.target.checked)}
-                disabled={!schema || !plan}
-                className="mt-1 h-4 w-4 rounded border-gray-300 text-emerald-700 focus:ring-emerald-600 disabled:opacity-50"
-              />
-              <span>Data quality section</span>
-            </label>
-            <label className="flex items-start gap-2">
-              <input
-                type="checkbox"
-                checked={includeEdaFullReport}
-                onChange={(e) => setIncludeEdaFullReport(e.target.checked)}
-                disabled={!edaResults}
-                className="mt-1 h-4 w-4 rounded border-gray-300 text-emerald-700 focus:ring-emerald-600 disabled:opacity-50"
-              />
-              <span>EDA section</span>
-            </label>
-            <label className="flex items-start gap-2">
-              <input
-                type="checkbox"
-                checked={includeModelingFullReport && hasModelingReport}
-                onChange={(e) => setIncludeModelingFullReport(e.target.checked)}
-                disabled={!hasModelingReport}
-                className="mt-1 h-4 w-4 rounded border-gray-300 text-emerald-700 focus:ring-emerald-600 disabled:opacity-50"
-              />
-              <span>Modeling section</span>
-            </label>
-            <label className="flex items-start gap-2">
-              <input
-                type="checkbox"
-                checked={includeMethodsSummaryFullReport}
-                onChange={(e) => setIncludeMethodsSummaryFullReport(e.target.checked)}
-                disabled={!stats || !schema || !plan}
-                className="mt-1 h-4 w-4 rounded border-gray-300 text-emerald-700 focus:ring-emerald-600 disabled:opacity-50"
-              />
-              <span>Methods summary section</span>
-            </label>
-            <label className="flex items-start gap-2">
-              <input
-                type="checkbox"
-                checked={includeEducationFullReport}
-                onChange={(e) => setIncludeEducationFullReport(e.target.checked)}
-                className="mt-1 h-4 w-4 rounded border-gray-300 text-emerald-700 focus:ring-emerald-600"
-              />
-              <span>Methods &amp; rationale section</span>
-            </label>
-          </div>
-          <div className="mt-4 flex flex-wrap items-center gap-3">
-            <button
-              type="button"
-              onClick={handleDownloadUnifiedReportHtml}
-              disabled={!formattedTable || isExportingReport}
-              className="px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50"
-            >
-              {isExportingReport ? "Rendering report..." : "Download report (.html)"}
-            </button>
-            <button
-              type="button"
-              onClick={handleDownloadUnifiedReportSource}
-              disabled={!formattedTable || isExportingReport}
-              className="px-4 py-2 border border-emerald-200 text-sm font-medium rounded-md text-emerald-950 bg-white hover:bg-emerald-50 disabled:opacity-50"
-            >
-              Download source (.md + figures)
-            </button>
-            <button
-              type="button"
-              onClick={handleOpenUnifiedReportPdf}
-              disabled={!formattedTable || isExportingReport}
-              className="px-4 py-2 border border-emerald-200 text-sm font-medium rounded-md text-emerald-950 bg-white hover:bg-emerald-50 disabled:opacity-50"
-            >
-              Print / Save PDF
-            </button>
-          </div>
-          <p className="mt-2 text-xs text-emerald-900">
-            The HTML is timestamped and self-contained, with report figures embedded. Use the PDF option to save the same report through your browser's print dialog.
-          </p>
+          <button type="button" data-testid="download-all" onClick={handleDownloadAll} disabled={!formattedTable || isExporting || isDownloadingAll || !engineReady} title={!engineReady ? (engineError ? "The analysis engine failed to start. Retry from the sidebar." : "Waiting for the analysis engine to finish starting…") : undefined} className="rounded-lg border border-blue-600 bg-white px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-50">{isDownloadingAll ? "Creating zip…" : "Download All (.zip)"}</button>
         </div>
 
-        <div className="mb-4 max-w-3xl rounded-lg border border-sky-100 bg-sky-50 p-4">
-          <h4 className="mb-3 text-sm font-semibold text-sky-950">Standalone methods &amp; rationale files</h4>
-          <div className="flex flex-wrap items-end gap-3">
-            <label className="flex flex-col text-xs font-medium text-sky-900">
-              Depth
-              <select
-                value={educationExportDepth}
-                onChange={(e) => setEducationExportDepth(e.target.value as ExplanationDepth)}
-                className="mt-1 rounded border border-sky-200 bg-white px-2 py-1.5 text-sm text-gray-900"
-              >
-                <option value="concise">Concise</option>
-                <option value="deep">Detailed</option>
-              </select>
-            </label>
-            <button
-              type="button"
-              onClick={handleDownloadEducationReportMarkdown}
-              className="px-4 py-2 border border-sky-200 text-sm font-medium rounded-md text-sky-900 bg-white hover:bg-sky-50"
-            >
-              Methods & rationale (.md)
-            </button>
-            <button
-              type="button"
-              onClick={handleDownloadEducationReportDocx}
-              className="px-4 py-2 border border-sky-200 text-sm font-medium rounded-md text-sky-900 bg-white hover:bg-sky-50"
-            >
-              Methods & rationale (.docx)
-            </button>
-          </div>
-        </div>
-        {figureExportItems.length > 0 && (
-          <div className="mb-5 max-w-2xl rounded-lg border border-sky-100 bg-sky-50 p-4">
-            <h4 className="text-sm font-semibold text-sky-950">Figure export</h4>
-            <div className="mt-3 flex flex-wrap items-end gap-3">
-              <label className="flex flex-col text-xs font-medium text-sky-900">
-                Format
-                <select
-                  value={figureFormat}
-                  onChange={(e) => setFigureFormat(e.target.value as "png" | "pdf" | "svg")}
-                  className="mt-1 rounded border border-sky-200 bg-white px-2 py-1.5 text-sm text-gray-900"
-                >
-                  <option value="png">PNG</option>
-                  <option value="pdf">PDF</option>
-                  <option value="svg">SVG</option>
-                </select>
-              </label>
-              <label className="flex flex-col text-xs font-medium text-sky-900">
-                DPI
-                <select
-                  value={figureDpi}
-                  onChange={(e) => setFigureDpi(Number(e.target.value))}
-                  className="mt-1 rounded border border-sky-200 bg-white px-2 py-1.5 text-sm text-gray-900"
-                >
-                  {[150, 300, 600].map((dpi) => (
-                    <option key={dpi} value={dpi}>{dpi}</option>
-                  ))}
-                </select>
-              </label>
-              <label className="flex flex-col text-xs font-medium text-sky-900">
-                Font scale
-                <input
-                  type="number"
-                  min="0.6"
-                  max="2"
-                  step="0.1"
-                  value={figureFontScale}
-                  onChange={(e) => setFigureFontScale(Number(e.target.value))}
-                  className="mt-1 w-24 rounded border border-sky-200 bg-white px-2 py-1.5 text-sm text-gray-900"
-                />
-              </label>
-              <button
-                type="button"
-                onClick={handleDownloadFiguresZip}
-                disabled={isExportingFigures}
-                className="px-4 py-2 border border-sky-200 text-sm font-medium rounded-md text-sky-900 bg-white hover:bg-sky-50 disabled:opacity-50"
-              >
-                {isExportingFigures ? "Rendering figures..." : `Download figures (.zip)`}
-              </button>
-            </div>
-            <p className="mt-2 text-xs text-sky-800">{figureExportItems.length} diagnostic figure files will be rendered using the active journal theme.</p>
-          </div>
-        )}
-        <div className="flex flex-wrap gap-3 rounded border border-blue-200 bg-blue-50 p-4">
-          <h4 className="w-full text-sm font-semibold text-blue-950">All files</h4>
-          {/* Download All */}
-          <button
-            id="download-all"
-            onClick={handleDownloadAll}
-            disabled={!formattedTable || isExporting || isDownloadingAll}
-            className="px-4 py-2 border border-blue-700 text-sm font-medium rounded-md shadow-sm text-white bg-blue-700 hover:bg-blue-800 disabled:opacity-50"
-          >
-            {isDownloadingAll ? "Downloading..." : "⬇ Download All"}
-          </button>
-
-          <div className="w-px bg-gray-200 self-stretch" />
-
-          <div data-testid="manuscript-table-export" className="w-full border-t border-blue-100 pt-3">
-            <h4 className="text-sm font-semibold text-gray-900">Manuscript table</h4>
-            <div className="mt-3 rounded border border-blue-100 bg-white p-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <h5 className="text-sm font-semibold text-blue-950">Manuscript Word export</h5>
-                  <p className="mt-1 text-xs text-blue-900">
-                    These options affect the Word (.docx) export below.
-                  </p>
+        <div className="grid items-start gap-4 min-[1201px]:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+          <div className="space-y-4 min-w-0">
+          <div className={`${cardCls}`}>
+            <h4 className="text-base font-semibold text-gray-900">Manuscript &amp; figures</h4>
+            <div data-testid="manuscript-table-export" className="mt-3">
+              <h5 className="text-sm font-semibold text-gray-900">Manuscript table</h5>
+              <div className="mt-2 rounded-lg border border-gray-200 bg-gray-50 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h5 className="text-sm font-semibold text-gray-900">Manuscript Word export</h5>
+                    <p className="mt-1 text-xs text-gray-600">These options affect the Word (.docx) export below.</p>
+                  </div>
+                  <button type="button" onClick={toggleManuscriptWordOptions} className={smallBtn}>
+                    {allEnabledManuscriptWordSelected ? "Clear all" : "Select all"}
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={toggleManuscriptWordOptions}
-                  className="rounded border border-blue-200 bg-white px-2 py-1 text-xs font-semibold text-blue-950 hover:bg-blue-50"
-                >
-                  {allEnabledManuscriptWordSelected ? "Clear all" : "Select all"}
-                </button>
-              </div>
-              <div className="mt-3 grid gap-3 text-sm text-gray-700 md:grid-cols-2">
-                <label className="flex items-start gap-3">
-                  <input
-                    type="checkbox"
-                    checked={includePlotsInDocx}
-                    onChange={(e) => setIncludePlotsInDocx(e.target.checked)}
-                    className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                  />
-                  <span>
-                    <span className="font-medium text-gray-900">Diagnostic plots as supplementary figures</span>
-                    <span className="block text-xs text-gray-500">
-                      Adds a Supplementary Figures section. Rendering may take 10-30 s depending on dataset size.
-                    </span>
-                  </span>
-                </label>
-                <label className="flex items-start gap-3">
-                  <input
-                    type="checkbox"
-                    checked={includeMethodsSummary}
-                    onChange={(e) => setIncludeMethodsSummary(e.target.checked)}
-                    disabled={!stats || !schema || !plan}
-                    className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50"
-                  />
-                  <span>
-                    <span className="font-medium text-gray-900">Methods summary appendix</span>
-                    <span className="block text-xs text-gray-500">
-                      Appends per-variable summary format, test, and selection reason.
-                    </span>
-                  </span>
-                </label>
-                <label className="flex items-start gap-3">
-                  <input
-                    type="checkbox"
-                    checked={includeEducationReport}
-                    onChange={(e) => setIncludeEducationReport(e.target.checked)}
-                    className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                  />
-                  <span>
-                    <span className="font-medium text-gray-900">Methods &amp; rationale explainer appendix</span>
-                    <span className="block text-xs text-gray-500">
-                      Appends the stage-by-stage teaching explainer using the selected depth.
-                    </span>
-                  </span>
-                </label>
-                {hasModelingReport && (
+                <div className="mt-3 grid gap-3 text-sm text-gray-700 md:grid-cols-2">
                   <label className="flex items-start gap-3">
-                    <input
-                      type="checkbox"
-                      checked={includeModelingReport}
-                      onChange={(e) => setIncludeModelingReport(e.target.checked)}
-                      className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                    />
+                    <input type="checkbox" checked={includePlotsInDocx} onChange={(e) => setIncludePlotsInDocx(e.target.checked)} className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
                     <span>
-                      <span className="font-medium text-gray-900">Modeling report appendix</span>
-                      <span className="block text-xs text-gray-500">
-                        Appends the publication-style modeling report after Table 1 and selected appendices.
-                      </span>
+                      <span className="font-medium text-gray-900">Diagnostic plots as supplementary figures</span>
+                      <span className="block text-xs text-gray-500">Adds a Supplementary Figures section. Rendering may take 10-30 s depending on dataset size.</span>
                     </span>
                   </label>
-                )}
-                <label className="flex items-start gap-3">
-                  <input
-                    type="checkbox"
-                    checked={includeEdaReport}
-                    onChange={(e) => setIncludeEdaReport(e.target.checked)}
-                    disabled={!edaResults}
-                    className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50"
-                  />
-                  <span>
-                    <span className="font-medium text-gray-900">EDA report appendix</span>
-                    <span className="block text-xs text-gray-500">
-                      Adds generated EDA summaries and available EDA plots. Generate EDA in Stage 5 first.
+                  <label className="flex items-start gap-3">
+                    <input type="checkbox" checked={includeMethodsSummary} onChange={(e) => setIncludeMethodsSummary(e.target.checked)} disabled={!stats || !schema || !plan} className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50" />
+                    <span>
+                      <span className="font-medium text-gray-900">Methods summary appendix</span>
+                      <span className="block text-xs text-gray-500">Appends per-variable summary format, test, and selection reason.</span>
                     </span>
-                  </span>
-                </label>
+                  </label>
+                  <label className="flex items-start gap-3">
+                    <input type="checkbox" checked={includeEducationReport} onChange={(e) => setIncludeEducationReport(e.target.checked)} className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                    <span>
+                      <span className="font-medium text-gray-900">Methods &amp; rationale explainer appendix</span>
+                      <span className="block text-xs text-gray-500">Appends the stage-by-stage teaching explainer using the selected depth.</span>
+                    </span>
+                  </label>
+                  {hasModelingReport && (
+                    <label className="flex items-start gap-3">
+                      <input type="checkbox" checked={includeModelingReport} onChange={(e) => setIncludeModelingReport(e.target.checked)} className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                      <span>
+                        <span className="font-medium text-gray-900">Modeling report appendix</span>
+                        <span className="block text-xs text-gray-500">Appends the publication-style modeling report after Table 1 and selected appendices.</span>
+                      </span>
+                    </label>
+                  )}
+                  <label className="flex items-start gap-3">
+                    <input type="checkbox" checked={includeEdaReport} onChange={(e) => setIncludeEdaReport(e.target.checked)} disabled={!edaResults} className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50" />
+                    <span>
+                      <span className="font-medium text-gray-900">EDA report appendix</span>
+                      <span className="block text-xs text-gray-500">Adds generated EDA summaries and available EDA plots. Generate EDA in Stage 5 first.</span>
+                    </span>
+                  </label>
+                </div>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <button id="download-docx" data-testid="download-docx" onClick={handleDownloadDocx} disabled={!formattedTable || isExporting} className={smallBtn}>
+                    {isExporting ? "Generating Word..." : "Download Word (.docx)"}
+                  </button>
+                </div>
               </div>
-              <div className="mt-4 flex flex-wrap gap-3">
-                <button
-                  id="download-docx"
-                  onClick={handleDownloadDocx}
-                  disabled={!formattedTable || isExporting}
-                  className="px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
-                >
-                  {isExporting ? "Generating Word..." : "Download Word (.docx)"}
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button id="download-csv" data-testid="download-csv" onClick={handleDownloadCsv} disabled={!formattedTable} className={smallBtn}>Download CSV</button>
+              <button id="download-xlsx" data-testid="download-xlsx" onClick={handleDownloadXlsx} disabled={!formattedTable} className={smallBtn}>Download Excel (.xlsx)</button>
+              <button id="download-latex" data-testid="download-latex" onClick={handleDownloadLatex} disabled={!formattedTable} className={smallBtn}>Download LaTeX</button>
+              {figureExportItems.length > 0 && (
+                <button type="button" data-testid="download-figures-zip" onClick={handleDownloadFiguresZip} disabled={isExportingFigures} className={smallBtn}>
+                  {isExportingFigures ? "Rendering figures..." : `Download figures (.zip)`}
                 </button>
-              </div>
+              )}
             </div>
           </div>
 
-          <button
-            id="download-csv"
-            onClick={handleDownloadCsv}
-            disabled={!formattedTable}
-            className="px-4 py-2 border border-gray-300 text-sm font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
-          >
-            Download CSV
-          </button>
-          <button
-            id="download-xlsx"
-            onClick={handleDownloadXlsx}
-            disabled={!formattedTable}
-            className="px-4 py-2 border border-gray-300 text-sm font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
-          >
-            Download Excel (.xlsx)
-          </button>
-          <button
-            id="download-latex"
-            onClick={handleDownloadLatex}
-            disabled={!formattedTable}
-            className="px-4 py-2 border border-gray-300 text-sm font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
-          >
-            Download LaTeX
-          </button>
-          <h4 className="w-full border-t border-blue-100 pt-3 text-sm font-semibold text-gray-900">Reproducibility bundle</h4>
-          <button
-            id="download-repro-json"
-            onClick={handleDownloadReproJson}
-            disabled={!stats}
-            className="px-4 py-2 border border-gray-300 text-sm font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
-          >
-            Reproducibility JSON
-          </button>
-          {/* Step 5 */}
-          <h4 className="w-full border-t border-blue-100 pt-3 text-sm font-semibold text-gray-900">Reviewer / audit files</h4>
-          <button
-            id="download-diagnostics"
-            onClick={handleDownloadDiagnostics}
-            disabled={!stats}
-            className="px-4 py-2 border border-gray-300 text-sm font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
-          >
-            Diagnostics (CSV/JSON)
-          </button>
-          {/* Step 6 */}
-          <h4 className="w-full border-t border-blue-100 pt-3 text-sm font-semibold text-gray-900">Reproducibility bundle</h4>
-          <button
-            id="download-analysis-history"
-            onClick={handleDownloadAnalysisHistory}
-            disabled={!stats}
-            className="px-4 py-2 border border-gray-300 text-sm font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
-          >
-            Reproducible Python (.py)
-          </button>
-          <button
-            id="download-data-quality-report"
-            onClick={handleDownloadDataQualityReport}
-            disabled={!stats}
-            className="px-4 py-2 border border-gray-300 text-sm font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
-          >
-            Data quality report (.md)
-          </button>
-          <button
-            id="download-data-quality-docx"
-            onClick={handleDownloadDataQualityDocx}
-            disabled={!stats}
-            className="px-4 py-2 border border-gray-300 text-sm font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
-          >
-            Data quality report (.docx)
-          </button>
-          <button
-            id="download-data-quality-pdf"
-            onClick={handleDownloadDataQualityPdf}
-            disabled={!stats}
-            className="px-4 py-2 border border-gray-300 text-sm font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
-          >
-            Data quality report (PDF)
-          </button>
-          <h4 className="w-full border-t border-blue-100 pt-3 text-sm font-semibold text-gray-900">Teaching / rationale</h4>
-          <button
-            id="download-eda-report"
-            onClick={handleDownloadEdaReport}
-            disabled={!edaResults}
-            className="px-4 py-2 border border-gray-300 text-sm font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
-          >
-            EDA report (.html)
-          </button>
-          <button
-            id="download-eda-summary"
-            onClick={handleDownloadEdaSummary}
-            disabled={!edaResults}
-            className="px-4 py-2 border border-gray-300 text-sm font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
-          >
-            Download EDA summary (.md)
-          </button>
-          <button
-            id="download-results-summary"
-            onClick={handleDownloadResultsSummary}
-            disabled={!resultsSummary}
-            className="px-4 py-2 border border-gray-300 text-sm font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
-          >
-            Download results summary (.md)
-          </button>
-          <button
-            id="download-methods-summary"
-            onClick={handleDownloadMethodsSummary}
-            disabled={!stats || !schema || !plan}
-            className="px-4 py-2 border border-gray-300 text-sm font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
-          >
-            Methods summary (.md)
-          </button>
-          <button
-            id="download-methods-summary-docx"
-            onClick={handleDownloadMethodsSummaryDocx}
-            disabled={!stats || !schema || !plan}
-            className="px-4 py-2 border border-gray-300 text-sm font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
-          >
-            Methods summary (.docx)
-          </button>
-          <h4 className="w-full border-t border-blue-100 pt-3 text-sm font-semibold text-gray-900">Modeling files</h4>
-          {hasModelingReport && (
-            <>
-              <button
-                id="download-modeling-report-md"
-                onClick={handleDownloadModelingReportMarkdown}
-                className="px-4 py-2 border border-gray-300 text-sm font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50"
-              >
-                Modeling report (.md)
+          <div className={`${cardCls}`}>
+            <h4 className="text-base font-semibold text-gray-900">Reproducibility &amp; audit</h4>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button id="download-repro-json" data-testid="download-repro-json" onClick={handleDownloadReproJson} disabled={!stats} className={smallBtn}>Reproducibility JSON</button>
+              <button id="download-analysis-history" data-testid="download-analysis-history" onClick={handleDownloadAnalysisHistory} disabled={!stats} className={smallBtn}>Reproducible Python (.py)</button>
+              <button id="download-diagnostics-csv" data-testid="download-diagnostics-csv" onClick={handleDownloadDiagnosticsCsv} disabled={!stats} className={smallBtn}>Diagnostics CSV</button>
+              <button id="download-diagnostics-json" data-testid="download-diagnostics-json" onClick={handleDownloadDiagnosticsJson} disabled={!stats} className={smallBtn}>Diagnostics JSON</button>
+              <button id="download-data-quality-report" data-testid="download-data-quality-report" onClick={handleDownloadDataQualityReport} disabled={!stats} className={smallBtn}>Data quality report (.md)</button>
+              <button id="download-data-quality-docx" data-testid="download-data-quality-docx" onClick={handleDownloadDataQualityDocx} disabled={!stats} className={smallBtn}>Data quality report (.docx)</button>
+              <div>
+                <button id="download-data-quality-pdf" data-testid="download-data-quality-pdf" onClick={handleDownloadDataQualityPdf} disabled={!stats} className={smallBtn}>Data quality report — print / save as PDF</button>
+                <p className="mt-1 text-xs text-gray-500">Opens a print view; choose 'Save as PDF' in your browser.</p>
+              </div>
+              <button id="download-methods-summary" data-testid="download-methods-summary" onClick={handleDownloadMethodsSummary} disabled={!stats || !schema || !plan} className={smallBtn}>Methods summary (.md)</button>
+              <button id="download-methods-summary-docx" data-testid="download-methods-summary-docx" onClick={handleDownloadMethodsSummaryDocx} disabled={!stats || !schema || !plan} className={smallBtn}>Methods summary (.docx)</button>
+              <button id="download-eda-report" data-testid="download-eda-report" onClick={handleDownloadEdaReport} disabled={!edaResults} className={smallBtn}>EDA report (.html)</button>
+              <button id="download-eda-summary" data-testid="download-eda-summary" onClick={handleDownloadEdaSummary} disabled={!edaResults} className={smallBtn}>Download EDA summary (.md)</button>
+            </div>
+          </div>
+
+          </div>
+          <div className="space-y-4 min-w-0">
+          <div className={cardCls}>
+            <h4 className="text-base font-semibold text-gray-900">Full report (single document)</h4>
+            <p className="mt-1 text-xs text-gray-600">Sections follow the checkboxes under What to include.</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button type="button" data-testid="download-report-html" onClick={handleDownloadUnifiedReportHtml} disabled={!formattedTable || isExportingReport} className={smallBtn}>
+                {isExportingReport ? "Rendering report..." : "Download report (.html)"}
               </button>
-              <button
-                id="download-modeling-report-docx"
-                onClick={handleDownloadModelingReportDocx}
-                className="px-4 py-2 border border-gray-300 text-sm font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50"
-              >
-                Modeling report (.docx)
+              <button type="button" data-testid="download-report-source" onClick={handleDownloadUnifiedReportSource} disabled={!formattedTable || isExportingReport} className={smallBtn}>
+                Download source (.md + figures)
               </button>
-              <button
-                id="download-modeling-data"
-                onClick={handleDownloadModelingData}
-                disabled={isExportingModelingData}
-                className="px-4 py-2 border border-gray-300 text-sm font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
-              >
-                {isExportingModelingData ? "Preparing modeling data..." : "Download all modeling data (.zip)"}
+              <button type="button" data-testid="open-report-pdf" onClick={handleOpenUnifiedReportPdf} disabled={!formattedTable || isExportingReport} className={smallBtn}>
+                Print / Save PDF
               </button>
-            </>
-          )}
+            </div>
+            <p className="mt-2 text-xs text-gray-600">
+              The HTML is timestamped and self-contained, with report figures embedded. Use the PDF option to save the same report through your browser's print dialog.
+            </p>
+          </div>
+
+          <div className={cardCls}>
+            <h4 className="text-base font-semibold text-gray-900">Teaching</h4>
+            <div className="mt-3 flex flex-wrap items-end gap-2">
+              <label className="flex flex-col text-xs font-medium text-gray-700">
+                Depth
+                <select
+                  value={educationExportDepth}
+                  onChange={(e) => setEducationExportDepth(e.target.value as ExplanationDepth)}
+                  className="mt-1 rounded border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900"
+                >
+                  <option value="concise">Concise</option>
+                  <option value="deep">Detailed</option>
+                </select>
+              </label>
+              <button type="button" data-testid="download-education-md" onClick={handleDownloadEducationReportMarkdown} className={smallBtn}>Methods & rationale (.md)</button>
+              <button type="button" data-testid="download-education-docx" onClick={handleDownloadEducationReportDocx} className={smallBtn}>Methods & rationale (.docx)</button>
+              <button id="download-results-summary" data-testid="download-results-summary" onClick={handleDownloadResultsSummary} disabled={!resultsSummary} className={smallBtn}>Download results summary (.md)</button>
+            </div>
+          </div>
+
+          <div className={cardCls}>
+            <h4 className="text-base font-semibold text-gray-900">Modeling</h4>
+            {hasModelingReport ? (
+              <>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button id="download-modeling-report-md" data-testid="download-modeling-report-md" onClick={handleDownloadModelingReportMarkdown} className={smallBtn}>Modeling report (.md)</button>
+                  <button id="download-modeling-report-docx" data-testid="download-modeling-report-docx" onClick={handleDownloadModelingReportDocx} className={smallBtn}>Modeling report (.docx)</button>
+                  <button id="download-modeling-data" data-testid="download-modeling-data" onClick={handleDownloadModelingData} disabled={isExportingModelingData} className={smallBtn}>
+                    {isExportingModelingData ? "Preparing modeling data..." : "Download all modeling data (.zip)"}
+                  </button>
+                </div>
+                <p className="mt-3 text-xs text-gray-500">
+                  Modeling data files contain row-level modeling data for your own re-plotting; they are downloaded locally and are not written anywhere else.
+                </p>
+              </>
+            ) : (
+              <p className="mt-3 text-sm text-gray-500">Modeling files appear here after you run Modeling (Step 6).</p>
+            )}
+          </div>
+          </div>
         </div>
-        {hasModelingReport && (
-          <p className="mt-3 max-w-2xl text-xs text-gray-500">
-            Modeling data files contain row-level modeling data for your own re-plotting; they are downloaded locally and are not written anywhere else.
-          </p>
-        )}
-      </CollapsibleSection>
-
-
-      <div className="flex justify-start">
-        <button
-          onClick={() => setStage(7)}
-          className="px-4 py-2 border border-gray-300 text-sm font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50 focus:outline-none"
-        >
-          Back
-        </button>
-      </div>
+      </section>
+      <StepActionBar
+        onBack={() => setStage(hasModelingReport ? 8 : 7)}
+        backLabel={hasModelingReport ? "Back to Modeling" : "Back to Statistical review"}
+        status={hasDownloaded ? { tone: "ok", text: "Downloaded" } : { tone: "info", text: "Table 1 ready to export" }}
+        engineReady={engineReady}
+        engineError={engineError}
+        primary={{ label: "Download All", testId: "download-all-action", needsEngine: true, onClick: handleDownloadAll }}
+      />
     </div>
   );
 }

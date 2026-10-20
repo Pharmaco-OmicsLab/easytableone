@@ -83,6 +83,8 @@ interface DiagnosticsPanelProps {
   schema?: Schema;
   groupingVariable?: string;
   journalId?: string;
+  selectedVariable?: string | null;
+  onVariableSelect?: (variable: string) => void;
 }
 
 /**
@@ -96,7 +98,7 @@ interface DiagnosticsPanelProps {
  *  - Column visibility toggle
  *  - Horizontal scroll indicator with always-visible scrollbar
  */
-export function DiagnosticsPanel({ results, schema, groupingVariable, journalId }: DiagnosticsPanelProps) {
+export function DiagnosticsPanel({ results, schema, groupingVariable, journalId, selectedVariable, onVariableSelect }: DiagnosticsPanelProps) {
   const { data, plan, setPlan, setStats } = useStore();
   const { fmt, iqrDelimiter, normalTemplate } = getContinuousFormatter(journalId);
   const plotTheme = getEffectiveJournalSettings(journalId ?? 'NEJM', plan?.userOverrides).plot_theme;
@@ -160,6 +162,9 @@ export function DiagnosticsPanel({ results, schema, groupingVariable, journalId 
   const continuousMethods = new Set<TestMethod>(['welch_t_test', 't_test', 'mann_whitney_u', 'oneway_anova', 'kruskal_wallis']);
   const categoricalMethods = new Set<TestMethod>(['chi_square', 'fishers_exact']);
   const methodLabel = (method: TestMethod): string => {
+    if (method === 'ordinal_rank') {
+      return numGroups === 2 ? 'Mann-Whitney U (ordered categories)' : 'Kruskal-Wallis (ordered categories)';
+    }
     if (method === 'welch_t_test') return "Welch's t-test";
     if (method === 't_test') return 'Student t-test';
     if (method === 'mann_whitney_u') return 'Mann-Whitney U';
@@ -172,6 +177,12 @@ export function DiagnosticsPanel({ results, schema, groupingVariable, journalId 
     const treatAs = plan?.variableConfig?.[variable]?.treatAs ?? schema?.columns.find((c) => c.name === variable)?.confirmedType;
     const effectiveContinuous = treatAs === 'continuous' || (!treatAs && inferredContinuous);
     const effectiveCategorical = treatAs === 'binary' || treatAs === 'categorical_nominal' || treatAs === 'categorical_ordinal' || (!treatAs && inferredCategorical);
+    if (method === 'ordinal_rank') {
+      if (treatAs !== 'categorical_ordinal') {
+        return `Override warning: ${methodLabel(method)} is only valid for ordered categorical variables (categorical_ordinal).`;
+      }
+      return null;
+    }
     if (effectiveContinuous && categoricalMethods.has(method)) {
       return `Override warning: ${methodLabel(method)} is a categorical test, but this variable is treated as continuous. The automatic continuous test would normally apply.`;
     }
@@ -433,7 +444,7 @@ export function DiagnosticsPanel({ results, schema, groupingVariable, journalId 
   return (
     <div className="space-y-4">
       {/* ── Control Bar ─────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-start bg-gray-50 border border-gray-200 rounded-lg p-3">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-start rounded-[14px] border border-gray-200 bg-white p-3 shadow-sm">
         {/* Left: Plot legend */}
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-xs font-semibold text-gray-700 whitespace-nowrap">Plots Legend:</span>
@@ -566,7 +577,7 @@ export function DiagnosticsPanel({ results, schema, groupingVariable, journalId 
           className={[
             // overflow-auto on both axes: x-scroll shows when content overflows,
             // y-scroll bounded by max-height — this also makes `thead sticky top-0` work.
-            'overflow-auto rounded-lg border border-gray-200 bg-white shadow-sm',
+            'overflow-auto rounded-xl border border-gray-200 bg-white',
             '[&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar]:w-2',
             '[&::-webkit-scrollbar-track]:bg-gray-100 [&::-webkit-scrollbar-track]:rounded-full',
             '[&::-webkit-scrollbar-thumb]:bg-gray-400 [&::-webkit-scrollbar-thumb]:rounded-full',
@@ -640,9 +651,19 @@ export function DiagnosticsPanel({ results, schema, groupingVariable, journalId 
                   { value: 'chi_square', label: 'Chi-square' },
                   { value: 'fishers_exact', label: is2x2 ? "Fisher's exact" : "Fisher's exact (Monte Carlo)" },
                 ];
+                const varConfig = plan?.variableConfig?.[v.variable];
+                const rowTreatAs = varConfig?.treatAs ?? varSchemaCol?.confirmedType;
+                const rowLevelOrder = varConfig?.levelOrder ?? varSchemaCol?.levels?.map((l) => l.code);
+                if (rowTreatAs === 'categorical_ordinal' && (rowLevelOrder?.length ?? 0) >= 3) {
+                  options.push({
+                    value: 'ordinal_rank',
+                    label: numGroups === 2 ? 'Mann-Whitney U (ordered categories)' : 'Kruskal-Wallis (ordered categories)',
+                  });
+                }
               }
 
               const getMethodKey = (name: string): TestMethod => {
+                if (name === 'Mann-Whitney U (ordinal)' || name === 'Kruskal-Wallis (ordinal)') return 'ordinal_rank';
                 if (name === "Welch's t-test" || name === 'Student t-test') return 'welch_t_test';
                 if (name === 'ANOVA') return 'oneway_anova';
                 if (name === 'Mann-Whitney U') return 'mann_whitney_u';
@@ -661,20 +682,32 @@ export function DiagnosticsPanel({ results, schema, groupingVariable, journalId 
               const shapiroPNum = typeof shapiroP === 'number' ? shapiroP : typeof shapiroP === 'string' ? parseFloat(shapiroP) : undefined;
               const pValStr = shapiroPNum !== undefined ? (shapiroPNum < 0.001 ? '< 0.001' : shapiroPNum.toFixed(2)) : '';
               const meaningText = buildStatMeaning(v, { results, schema, groupingVariable, journalId, userOverrides: plan?.userOverrides });
-              const smdFormatted = v.smd === null || v.smd === undefined ? 'â€”' : v.smd.toFixed(3);
+              const smdFormatted = v.smd === null || v.smd === undefined ? '—' : v.smd.toFixed(3);
               const postHoc = v.postHoc;
               const significantPosthocPairs = postHoc?.pairs.filter((pair) => pair.significant) ?? [];
               const allPosthocPairs = postHoc?.pairs ?? [];
               const smdTooltip = results.groups.length === 2
                 ? `SMD is the absolute standardized difference between ${resolveGroupName(results.groups[1]?.name ?? '')} and ${resolveGroupName(results.groups[0]?.name ?? '')}; it has no sign — magnitude indicates imbalance (SMD > 0.1 is conventionally considered imbalanced).`
                 : `Shown is the largest pairwise SMD across groups; magnitude, not sign, indicates imbalance (SMD > 0.1 is conventionally considered imbalanced).`;
-              const warningText = isContinuous
-                ? `Shapiro–Wilk p = ${pValStr} indicates the data are not normally distributed; a t-test assumes normality, so its P-value may be unreliable. Mann–Whitney U is recommended.`
-                : `Some expected cell counts are < 5; the chi-square approximation is unreliable, so Fisher's exact test is recommended.`;
+              const reason = v.test.auxiliary?.contradictionReason;
+              let warningText = '';
+              if (hasContradiction) {
+                if (reason === 'unequal_variance') {
+                  const leveneP = v.test.auxiliary?.levenePValue;
+                  const levenePNum = typeof leveneP === 'number' ? leveneP : typeof leveneP === 'string' ? parseFloat(leveneP) : undefined;
+                  const p = levenePNum !== undefined ? (levenePNum < 0.001 ? '< 0.001' : levenePNum.toFixed(2)) : '';
+                  warningText = `Levene/Brown-Forsythe p = ${p} indicates unequal group variances; one-way ANOVA assumes equal variances, so its P-value may be unreliable. Welch's ANOVA is the indicated alternative but is not available in this release.`;
+                } else if (reason === 'low_expected_count' || (!reason && isCategorical)) {
+                  warningText = `Some expected cell counts are < 5; the chi-square approximation is unreliable, so Fisher's exact test is recommended.`;
+                } else {
+                  warningText = `Shapiro–Wilk p = ${pValStr} indicates the data are not normally distributed; a t-test assumes normality, so its P-value may be unreliable. Mann–Whitney U is recommended.`;
+                }
+              }
 
               // Per-row height (Wrap Text OFF only)
               const rowH = (!wrapText && rowHeights[v.variable]) ? rowHeights[v.variable] : undefined;
-              const rowBg = rowIdx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50';
+              const isSelected = selectedVariable === v.variable;
+              const rowBg = isSelected ? 'bg-blue-50' : rowIdx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50';
               const cellBase = 'px-4 py-2 border-r border-gray-100 last:border-r-0 align-middle';
               const cellWrap = wrapText ? 'whitespace-normal break-words' : 'whitespace-nowrap overflow-hidden';
 
@@ -753,8 +786,9 @@ export function DiagnosticsPanel({ results, schema, groupingVariable, journalId 
                             <div className="flex flex-col gap-1 w-full items-center">
                               <select
                                 value={selectedMethodKey}
+                                aria-label={`Test for ${varDisplay}`}
                                 onChange={(e) => handleOverrideChange(v.variable, e.target.value as TestMethod)}
-                                className="text-xs border rounded px-1.5 py-1 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500 w-full"
+                                className="min-w-[170px] rounded-md border border-gray-300 bg-white px-2 py-1.5 text-xs text-gray-700 focus:outline-2 focus:outline-blue-600 w-full"
                                 style={{ textAlign: 'center', textAlignLast: 'center' }}
                               >
                                 {options.map((opt) => (
@@ -762,7 +796,7 @@ export function DiagnosticsPanel({ results, schema, groupingVariable, journalId 
                                 ))}
                               </select>
                               {override && (
-                                <button onClick={() => handleResetOverride(v.variable)} className="text-[10px] text-blue-600 hover:text-blue-800 underline">
+                                <button type="button" onClick={() => handleResetOverride(v.variable)} className="rounded border border-gray-200 bg-white px-2 py-1 text-[11px] font-medium text-blue-700 hover:bg-blue-50">
                                   Reset to default
                                 </button>
                               )}
@@ -815,6 +849,9 @@ export function DiagnosticsPanel({ results, schema, groupingVariable, journalId 
                                       );
                                     })}
                                   </details>
+                                )}
+                                {postHoc.caveat && (
+                                  <div className="text-amber-700">{postHoc.caveat}</div>
                                 )}
                               </div>
                             </details>
@@ -915,14 +952,26 @@ export function DiagnosticsPanel({ results, schema, groupingVariable, journalId 
                 <React.Fragment key={v.variable}>
                   <tr
                     data-varname={v.variable}
-                    className={`${rowBg} hover:bg-blue-50/20 transition-colors`}
+                    tabIndex={onVariableSelect ? 0 : undefined}
+                    aria-label={onVariableSelect ? `Show test details for ${varDisplay}` : undefined}
+                    aria-expanded={onVariableSelect ? selectedVariable === v.variable : undefined}
+                    onClick={(event) => {
+                      if (!onVariableSelect || (event.target as HTMLElement).closest('button,select,input,textarea,a,[data-no-row-select]')) return;
+                      onVariableSelect(v.variable);
+                    }}
+                    onKeyDown={(event) => {
+                      if (!onVariableSelect || event.target !== event.currentTarget || (event.key !== 'Enter' && event.key !== ' ')) return;
+                      event.preventDefault();
+                      onVariableSelect(v.variable);
+                    }}
+                    className={`${rowBg} ${onVariableSelect ? 'cursor-pointer focus-visible:outline-2 focus-visible:outline-blue-600' : ''} ${isSelected ? 'hover:bg-blue-50' : 'hover:bg-gray-100'} transition-colors`}
                   >
                     {visibleCols.map((col) => renderCell(col))}
                   </tr>
                   {hasContradiction && (
                     <tr className="bg-amber-50">
-                      <td colSpan={visibleCols.length} className="px-4 py-2 border border-amber-200">
-                        <div className="text-amber-800 font-medium text-xs flex items-center gap-1">
+                      <td colSpan={visibleCols.length} className="border border-amber-200 px-4 py-2">
+                        <div className="flex items-center gap-1 text-xs font-medium text-amber-800" role="note">
                           <span className="font-bold">⚠️ Warning:</span>
                           <span>{warningText}</span>
                         </div>

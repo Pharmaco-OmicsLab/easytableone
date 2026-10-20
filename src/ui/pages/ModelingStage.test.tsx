@@ -59,14 +59,14 @@ describe("ModelingStage large-N gate", () => {
     const logisticRun = screen.getByRole("button", { name: "Run logistic regression" });
     expect(logisticRun).toHaveProperty("disabled", true);
 
-    fireEvent.click(screen.getByRole("button", { name: "Machine Learning" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Machine Learning" }));
     const mlRun = screen.getByRole("button", { name: "Run benchmark" });
     expect(mlRun).toHaveProperty("disabled", true);
 
     fireEvent.click(screen.getByLabelText(/I understand this may be slow/));
 
     expect(screen.getByRole("button", { name: "Run benchmark" })).toHaveProperty("disabled", false);
-    fireEvent.click(screen.getByRole("button", { name: "Logistic Regression" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Logistic Regression" }));
     expect(screen.getByRole("button", { name: "Run logistic regression" })).toHaveProperty("disabled", false);
   });
 

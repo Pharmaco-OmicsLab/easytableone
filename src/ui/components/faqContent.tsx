@@ -1,5 +1,5 @@
 import type React from "react";
-import faqMarkdown from "../../../public/faq.md?raw";
+import faqMarkdown from "../../content/faq.md?raw";
 
 export const FAQ_CATEGORIES = [
   "Basics & getting started",

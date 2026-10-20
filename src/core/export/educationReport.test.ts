@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { dummyPlan, dummySchema, mockStats } from "../../../tests/format/mockStats";
 import type { EducationContext } from "../education/educationTypes";
 import { buildEducationReportDocxChildren, buildEducationReportMarkdown, exportEducationReportDocx } from "./educationReport";
+import { getDecision, STAGE_DECISIONS, STAGE_ORDER } from "../education/educationContent";
 
 const round9Labels = [
   "Type inference",
@@ -38,6 +39,35 @@ const round9Context: EducationContext = {
 };
 
 describe("education report export", () => {
+  it("omits the Modeling section, but preserves cross-references, until a model result exists", () => {
+    const withoutModeling = { stats: mockStats, schema: dummySchema, plan: dummyPlan };
+    const markdown = buildEducationReportMarkdown(withoutModeling, "concise");
+    const children = buildEducationReportDocxChildren(withoutModeling, "concise");
+    const childText = JSON.stringify(children);
+    const modelingLabels = STAGE_DECISIONS.modeling.map((id) => getDecision(id, "concise", withoutModeling).label);
+
+    expect(markdown).not.toContain("## Modeling");
+    expect(childText).not.toMatch(/"text":"Modeling"/);
+    for (const label of modelingLabels) {
+      expect(markdown).not.toContain(`#### ${label}`);
+      expect(childText).not.toMatch(new RegExp(`\\"text\\":\\"${label}\\"`));
+    }
+    expect(markdown).not.toContain("Explanation coming soon");
+    expect(childText).not.toContain("Explanation coming soon");
+    expect(markdown).toContain("choose it in the Modeling step");
+    expect(markdown.match(/^## /gm)).toHaveLength(STAGE_ORDER.length - 1);
+
+    for (const modelingResults of [{ logistic: {} }, { ml: {} }]) {
+      const withModeling = { ...withoutModeling, modelingResults: modelingResults as any };
+      expect(buildEducationReportMarkdown(withModeling, "concise")).toContain("## Modeling");
+      expect(JSON.stringify(buildEducationReportDocxChildren(withModeling, "concise"))).toContain("Modeling");
+    }
+
+    const emptyModeling = { ...withoutModeling, modelingResults: { logistic: null, ml: null } as any };
+    expect(buildEducationReportMarkdown(emptyModeling, "concise")).not.toContain("## Modeling");
+    expect(buildEducationReportMarkdown(emptyModeling, "concise").match(/^## /gm)).toHaveLength(STAGE_ORDER.length - 1);
+  });
+
   it("includes all stage overviews and data-driven decisions", () => {
     const markdown = buildEducationReportMarkdown({ stats: mockStats, schema: dummySchema, plan: dummyPlan }, "concise");
     expect(markdown).toContain("## Upload Dataset");

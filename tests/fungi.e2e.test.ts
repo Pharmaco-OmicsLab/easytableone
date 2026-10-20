@@ -9,6 +9,7 @@ import { formatTable } from "../src/core/format/formatTable";
 import { pyodideClient } from "../src/workers/pyodide.client";
 
 const MATERIALS_DIR = path.resolve(__dirname, "../_materials");
+const INTERNAL_FUNGI = path.join(MATERIALS_DIR, "samples", "250409_fungi_dataplus_master_file.xlsx");
 
 function getFile(filename: string): File {
   const directPath = path.join(MATERIALS_DIR, filename);
@@ -21,10 +22,10 @@ function getFile(filename: string): File {
   });
 }
 
-describe("Fungi E2E Pipeline", () => {
+describe.skipIf(!fs.existsSync(INTERNAL_FUNGI))("Fungi E2E Pipeline (internal fixture: 250409_fungi_dataplus_master_file.xlsx)", () => {
   beforeAll(async () => {
     await pyodideClient.isReady();
-  }, 60000);
+  });
 
   it("fungi Sheet 2 grouped by Pallor/Cyanosis: docx footnote does not mention 2Ã—2", async () => {
     const file = getFile("250409_fungi_dataplus_master_file.xlsx");

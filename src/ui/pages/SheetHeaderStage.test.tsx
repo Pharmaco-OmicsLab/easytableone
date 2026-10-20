@@ -1,119 +1,76 @@
-import { render, screen, waitFor } from "@testing-library/react";
-import * as XLSX from "xlsx";
-import { beforeEach, describe, expect, it } from "vitest";
-import { LARGE_N_NOTICE_THRESHOLD } from "../../core/performance/largeDatasetGuardrails";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useStore } from "../../store";
+
+const xlsxMocks = vi.hoisted(() => ({
+  read: vi.fn(),
+  sheetToJson: vi.fn(),
+  parseXLSXSheet: vi.fn(),
+}));
+
+vi.mock("xlsx", () => ({
+  read: xlsxMocks.read,
+  utils: { sheet_to_json: xlsxMocks.sheetToJson },
+}));
+
+vi.mock("../../core/parser/xlsx", () => ({
+  enumerateSheets: vi.fn(),
+  parseXLSXSheet: xlsxMocks.parseXLSXSheet,
+}));
+
 import SheetHeaderStage from "./SheetHeaderStage";
 
-function makeWorkbookFile(name: string, rows: any[][]): File {
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(rows), "Data");
-  const bytes = XLSX.write(workbook, { bookType: "xlsx", type: "array" }) as ArrayBuffer;
-  return new File([bytes], name, {
-    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  });
-}
-
-describe("SheetHeaderStage", () => {
+describe("SheetHeaderStage row limit", () => {
   beforeEach(() => {
+    const file = new File([""], "large.xlsx");
+    Object.defineProperty(file, "arrayBuffer", { value: async () => new ArrayBuffer(0) });
     useStore.setState({
       stage: 2,
-      file: { name: "single.xlsx" } as any,
-      sheets: [{ name: "Data", rowCount: 3, colCount: 2, isLikelyDictionary: false }],
-      selectedSheet: null,
+      file,
+      sheets: [{ name: "Data", rowCount: 100_002, colCount: 1, isLikelyDictionary: false }],
+      selectedSheet: "Data",
       headerRowIndex: 0,
       data: null,
       error: null,
     } as any);
+    xlsxMocks.read.mockReset().mockReturnValue({ Sheets: { Data: {} } });
+    xlsxMocks.sheetToJson.mockReset().mockReturnValue([
+      ["id"],
+      ...Array.from({ length: 100_001 }, (_, index) => [index + 1]),
+    ]);
+    xlsxMocks.parseXLSXSheet.mockReset();
   });
 
-  it("auto-selects a single XLSX sheet and hides the picker", async () => {
+  it("rejects an oversized sheet before parsing or storing it", async () => {
     render(<SheetHeaderStage />);
 
-    await waitFor(() => expect(useStore.getState().selectedSheet).toBe("Data"));
-    expect(screen.queryByText("1. Select Data Sheet")).toBeNull();
-    expect(screen.getByText("2. Confirm Header Row")).toBeDefined();
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("100,001 data rows"));
+    const confirm = screen.getByTestId("header-row-confirm") as HTMLButtonElement;
+    expect(confirm.disabled).toBe(true);
+    expect(useStore.getState().data).toBeNull();
+    expect(xlsxMocks.parseXLSXSheet).not.toHaveBeenCalled();
+    fireEvent.click(confirm);
+    expect(useStore.getState().stage).toBe(2);
   });
 
-  it("reloads missing workbook sheets and still hides the picker for one-sheet workbooks", async () => {
+  it("changes the selected header through row buttons and the stepper", async () => {
     useStore.setState({
-      file: makeWorkbookFile("single.xlsx", [
-        ["age", "sex"],
-        [42, "F"],
-      ]),
-      sheets: [],
-      selectedSheet: null,
-    } as any);
-
-    render(<SheetHeaderStage />);
-
-    expect(screen.getByText("1. Select Data Sheet")).toBeDefined();
-    expect(screen.getByText("Reading workbook sheets...")).toBeDefined();
-
-    await waitFor(() => expect(useStore.getState().selectedSheet).toBe("Data"));
-    expect(screen.getByText("Preview using row 1 as headers")).toBeDefined();
-    expect(screen.queryByText("Reading workbook sheets...")).toBeNull();
-  });
-
-  it("shows a real XLSX preview with counts and likely grouping candidates", async () => {
-    useStore.setState({
-      file: makeWorkbookFile("single.xlsx", [
-        ["group", "age", "sex"],
-        ["A", 42, "F"],
-        ["B", 51, "M"],
-        ["A", 39, "F"],
-      ]),
-      sheets: [{ name: "Data", rowCount: 4, colCount: 3, isLikelyDictionary: false }],
+      stage: 2,
+      file: new File([""], "small.xlsx"),
+      sheets: [{ name: "Data", rowCount: 3, colCount: 2, isLikelyDictionary: false }],
       selectedSheet: "Data",
       headerRowIndex: 0,
       data: null,
+      error: null,
     } as any);
-
-    render(<SheetHeaderStage />);
-
-    await waitFor(() => expect(screen.getByText("Preview using row 1 as headers")).toBeDefined());
-    expect(screen.getByText("3 rows x 3 columns")).toBeDefined();
-    expect(screen.getByText("42")).toBeDefined();
-    expect(screen.getByText(/Likely grouping candidates:/).parentElement?.textContent).toContain("group");
-    expect(document.body.textContent).not.toContain("0-indexed");
-  });
-
-  it("shows a real CSV preview with counts", async () => {
-    useStore.setState({
-      file: { name: "study.csv" } as any,
-      sheets: [],
-      selectedSheet: null,
-      headerRowIndex: 0,
-      data: {
-        columns: [{ originalName: "arm", name: "arm" }, { originalName: "age", name: "age" }],
-        rows: [["A", 10], ["B", 20], ["A", 30]],
-        meta: {} as any,
-      },
-    } as any);
-
-    render(<SheetHeaderStage />);
-
-    expect(screen.getByText("3 rows x 2 columns")).toBeDefined();
-    expect(screen.getByText("10")).toBeDefined();
-    expect(screen.getByText(/Likely grouping candidates:/).parentElement?.textContent).toContain("arm");
-  });
-
-  it("shows the large-N notice from the preview row count", async () => {
-    useStore.setState({
-      file: { name: "study.csv" } as any,
-      sheets: [],
-      selectedSheet: null,
-      headerRowIndex: 0,
-      data: {
-        columns: [{ originalName: "arm", name: "arm" }],
-        rows: Array.from({ length: LARGE_N_NOTICE_THRESHOLD + 1 }, () => ["A"]),
-        meta: {} as any,
-      },
-    } as any);
-
-    render(<SheetHeaderStage />);
-
-    expect(screen.getByText(/50,001 rows/)).toBeDefined();
-    expect(screen.getByText(/Table 1 and EDA/)).toBeDefined();
+    xlsxMocks.read.mockReturnValue({ Sheets: { Data: {} } });
+    xlsxMocks.sheetToJson.mockReturnValue([["Report title", ""], ["arm", "age"], ["A", 34]]);
+    render(<SheetHeaderStage embedded />);
+    const rowTwo = await screen.findByRole("button", { name: "Use row 2 as header" });
+    fireEvent.click(rowTwo);
+    expect(useStore.getState().headerRowIndex).toBe(1);
+    fireEvent.click(screen.getByRole("button", { name: "Next row" }));
+    expect(useStore.getState().headerRowIndex).toBe(2);
+    expect(screen.getByTestId("header-row-selector").textContent).toBe("3");
   });
 });

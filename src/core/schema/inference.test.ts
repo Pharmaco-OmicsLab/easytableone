@@ -1,7 +1,11 @@
+import fs from "node:fs";
 import { describe, expect, it } from "vitest";
+import path from "node:path";
+import * as XLSX from "xlsx";
 import { runChecks } from "../qa/checkRegistry";
 import type { DataFrame } from "../types";
-import { inferSchema } from "./inference";
+import { parseXLSXSheet } from "../parser/xlsx";
+import { ID_LIKE_MIN_COVERAGE, inferSchema } from "./inference";
 import { deriveSchemaReviewSignal } from "./reviewSignal";
 
 function makeFrame(columns: string[], rows: unknown[][]): DataFrame {
@@ -103,6 +107,21 @@ describe("inferSchema D18a integer cardinality band", () => {
   });
 });
 
+describe("inferSchema large arrays", () => {
+  it("matches the first 1,000 rows when inferring a 200,000-row frame", () => {
+    const makeRows = (count: number) => Array.from({ length: count }, (_, index) => [
+      index + 1,
+      (index % 1000) / 10,
+      index % 3 === 0 ? "A" : index % 3 === 1 ? "B" : "C",
+    ]);
+    const columns = ["record_id", "measurement", "category"];
+    const small = inferSchema(makeFrame(columns, makeRows(1_000)));
+    const large = inferSchema(makeFrame(columns, makeRows(200_000)));
+
+    expect(large.map((column) => column.confirmedType)).toEqual(small.map((column) => column.confirmedType));
+  });
+});
+
 describe("inferSchema D91 ordered range labels", () => {
   it("infers bracketed age and weight bins as ordinal with numeric order", () => {
     const [age, weight] = inferSchema(makeFrame(
@@ -137,5 +156,36 @@ describe("inferSchema D91 ordered range labels", () => {
   it("does not reclassify two-level threshold labels", () => {
     const [col] = inferSchema(makeFrame(["age50"], [["<50"], [">=50"], ["<50"]]));
     expect(col.confirmedType).toBe("binary");
+  });
+});
+
+describe("inferSchema D99 identifier narrowing", () => {
+  const distinctRows = (populated: number, valueForIndex: (index: number) => unknown) =>
+    Array.from({ length: 40 }, (_, index) => [index < populated ? valueForIndex(index) : null]);
+
+  it("requires near-complete coverage and non-negative whole numbers for unnamed numeric identifiers", () => {
+    expect(ID_LIKE_MIN_COVERAGE).toBe(0.9);
+    expect(inferSchema(makeFrame(["delta"], distinctRows(22, (index) => index - 11)))[0].confirmedType).toBe("continuous");
+    expect(inferSchema(makeFrame(["record_number"], distinctRows(40, (index) => index + 1)))[0].confirmedType).toBe("id_like");
+    expect(inferSchema(makeFrame(["record_number"], distinctRows(36, (index) => index + 1)))[0].confirmedType).toBe("id_like");
+    expect(inferSchema(makeFrame(["record_number"], distinctRows(35, (index) => index + 1)))[0].confirmedType).toBe("continuous");
+  });
+
+  it("keeps all-distinct strings and explicitly named sparse identifiers as id_like", () => {
+    expect(inferSchema(makeFrame(["record"], distinctRows(40, (index) => `person-${index + 1}`)))[0].confirmedType).toBe("id_like");
+    expect(inferSchema(makeFrame(["patient_id"], distinctRows(5, (index) => index + 1)))[0].confirmedType).toBe("id_like");
+  });
+
+  const internalStudy = path.resolve(__dirname, "../../../_materials/samples/DrKhanh/15082026_modified.xlsx");
+  describe.skipIf(!fs.existsSync(internalStudy))("internal fixture: DrKhanh/15082026_modified.xlsx", () => {
+  it("finds only Ma_BN as id_like in both real study sheets", () => {
+    const workbook = XLSX.readFile(internalStudy);
+
+    for (const sheetName of ["Data", "Datafull"]) {
+      const schema = inferSchema(parseXLSXSheet(workbook, sheetName, 0));
+      expect(schema.filter((column) => column.confirmedType === "id_like").map((column) => column.name)).toEqual(["Ma_BN"]);
+      expect(schema.find((column) => column.name === "Delta_NH3")?.confirmedType).toBe("continuous");
+    }
+  });
   });
 });

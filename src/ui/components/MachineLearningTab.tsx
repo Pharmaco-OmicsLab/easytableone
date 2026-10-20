@@ -214,8 +214,10 @@ export default function MachineLearningTab({ setup, result, running, error, onRu
           </div>
         </>
       ) : (
-        <div className="rounded border border-gray-200 bg-white p-8 text-center text-sm text-gray-500">
-          Run the benchmark to compare discrimination, calibration, variable importance, and confusion matrices.
+        <div className="rounded-xl border border-gray-200 bg-gray-50 px-6 py-10 text-center text-sm text-gray-600">
+          <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 text-xl font-semibold text-blue-600" aria-hidden="true">＋</div>
+          <h3 className="text-base font-semibold text-gray-900">No model yet</h3>
+          <p className="mt-1">Choose an outcome and predictors, then run the benchmark. Results appear here.</p>
         </div>
       )}
     </div>

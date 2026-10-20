@@ -1,19 +1,35 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useStore } from "../../store";
-import { getColumnDisplayLabel } from "../../core/format/columnLabel";
+import { getColumnDisplayLabel, resolveLevelLabel } from "../../core/format/columnLabel";
 import { stripBracketCodes } from "../../core/format/tableTitle";
 import { DiagnosticsPanel } from "../components/DiagnosticsPanel";
-import { journalRulesets } from "../../core/format/formatTable";
+import { formatTable, journalRulesets } from "../../core/format/formatTable";
+import { APP_VERSION } from "../../core/appVersion";
+import { HtmlPreview } from "../../core/export/htmlPreview";
 import { countTestedVariablesFromResults, getMtcAdvice } from "../../core/stats/mtcAdvice";
 import { getBaselineTestingAdvice } from "../../core/stats/baselineTestingAdvice";
 import { isFisherLike } from "../../core/format/testName";
 import AboutThisStep from "../components/AboutThisStep";
 import DecisionExplainer from "../components/DecisionExplainer";
 import EmptyState from "../components/EmptyState";
+import StepHeader from "../layout/StepHeader";
+import StepActionBar from "../layout/StepActionBar";
+import { DiagnosticThumbnail } from "../components/DiagnosticThumbnail";
 
 export default function StatsPreviewStage() {
-  const { stats, schema, plan, journalId, setStage, setModelingEnabled, setPlan } = useStore();
+  const { stats, schema, plan, journalId, setStage, setModelingEnabled, setPlan, dataQualityRecords, qaReport } = useStore();
   const [baselineAdviceDismissed, setBaselineAdviceDismissed] = useState(false);
+  const [selectedVariable, setSelectedVariable] = useState<string | null>(null);
+  const [activeGlossary, setActiveGlossary] = useState<string | null>(null);
+  const formattedTable = useMemo(() => {
+    if (!stats || !plan || !schema) return null;
+    try {
+      return formatTable(stats, journalId, plan, schema, APP_VERSION, dataQualityRecords, qaReport);
+    } catch (err) {
+      console.error(err);
+      return null;
+    }
+  }, [stats, journalId, plan, schema, dataQualityRecords, qaReport]);
 
   if (!stats) {
     return (
@@ -31,7 +47,7 @@ export default function StatsPreviewStage() {
   const mtcAdvice = plan ? getMtcAdvice(plan, countTestedVariablesFromResults(stats)) : null;
   const smdAvailable = stats.perVariable.some((v) => v.smd !== undefined && v.smd !== null);
   const baselineAdvice = plan && !baselineAdviceDismissed
-    ? getBaselineTestingAdvice(plan, smdAvailable)
+    ? getBaselineTestingAdvice(plan, smdAvailable ? "computed" : "rerun_required")
     : null;
 
   const getDisplayVar = (name: string) => {
@@ -50,27 +66,26 @@ export default function StatsPreviewStage() {
     }
 
     if (isContinuous) {
-      const groupSizes = stats.groups.map(g => v.summaryByGroup[g.name]?.n ?? 0);
-      const nMin = Math.min(...groupSizes);
       const isNormal = ["Welch's t-test", 'ANOVA'].includes(v.test.name);
       
       const alternative = stats.groups.length === 2
         ? (isNormal ? "Mann-Whitney U test" : "Welch's t-test")
         : (isNormal ? "Kruskal-Wallis test" : "one-way ANOVA");
 
-      if (nMin <= logic.large_n_threshold_n) {
-        if (isNormal) {
-          return `${varDisplay} met the normality assumption (Shapiro–Wilk test p >= ${logic.small_n_threshold_p} for all groups), so the parametric ${v.test.name} was used. If the data had not been approximately normal, the non-parametric ${alternative} would apply.`;
-        } else {
-          return `${varDisplay} did not meet the normality assumption (Shapiro–Wilk test p < ${logic.small_n_threshold_p} in at least one group), so the non-parametric ${v.test.name} was used. If the data had been approximately normal, the parametric ${alternative} would apply.`;
-        }
-      } else {
-        if (isNormal) {
-          return `${varDisplay} met the normality assumption (group skewness within ±${logic.large_n_skew_max} and excess kurtosis within ±${logic.large_n_kurt_max}), so the parametric ${v.test.name} was used. If the data had not been approximately normal, the non-parametric ${alternative} would apply.`;
-        } else {
-          return `${varDisplay} did not meet the normality assumption (group skewness outside ±${logic.large_n_skew_max} or excess kurtosis outside ±${logic.large_n_kurt_max}), so the non-parametric ${v.test.name} was used. If the data had been approximately normal, the parametric ${alternative} would apply.`;
-        }
+      const normalityMethod = v.test.auxiliary?.normalityMethod;
+      if (normalityMethod === "mixed") {
+        return isNormal
+          ? `${varDisplay} met the normality assumption using Shapiro-Wilk for groups with n <= ${logic.large_n_threshold_n} and skewness/kurtosis for groups with n > ${logic.large_n_threshold_n}, so the parametric ${v.test.name} was used. If the data had not been approximately normal, the non-parametric ${alternative} would apply.`
+          : `${varDisplay} did not meet the normality assumption using Shapiro-Wilk for groups with n <= ${logic.large_n_threshold_n} and skewness/kurtosis for groups with n > ${logic.large_n_threshold_n}, so the non-parametric ${v.test.name} was used. If the data had been approximately normal, the parametric ${alternative} would apply.`;
       }
+      if (normalityMethod === "skew_kurtosis") {
+        return isNormal
+          ? `${varDisplay} met the normality assumption (group skewness within ±${logic.large_n_skew_max} and excess kurtosis within ±${logic.large_n_kurt_max}), so the parametric ${v.test.name} was used. If the data had not been approximately normal, the non-parametric ${alternative} would apply.`
+          : `${varDisplay} did not meet the normality assumption (group skewness outside ±${logic.large_n_skew_max} or excess kurtosis outside ±${logic.large_n_kurt_max}), so the non-parametric ${v.test.name} was used. If the data had been approximately normal, the parametric ${alternative} would apply.`;
+      }
+      return isNormal
+        ? `${varDisplay} met the normality assumption (Shapiro–Wilk test p >= ${logic.small_n_threshold_p} for all groups), so the parametric ${v.test.name} was used. If the data had not been approximately normal, the non-parametric ${alternative} would apply.`
+        : `${varDisplay} did not meet the normality assumption (Shapiro–Wilk test p < ${logic.small_n_threshold_p} in at least one group), so the non-parametric ${v.test.name} was used. If the data had been approximately normal, the parametric ${alternative} would apply.`;
     }
 
     if (isCategorical) {
@@ -89,26 +104,39 @@ export default function StatsPreviewStage() {
     return "";
   };
 
-  const getDecisionBadge = (v: any) => {
-    if (isFisherLike(v.test.name)) return v.test.name.includes('Monte Carlo') ? "Fisher's exact (Monte Carlo) - sparse table" : "Fisher's exact - sparse cells";
-    if (v.test.name === "Chi-square") return "Chi-square - adequate expected counts";
-    if (v.test.name === "Welch's t-test") return "Welch t-test - normality acceptable";
-    if (v.test.name === "ANOVA") return "ANOVA - normality acceptable";
-    if (v.test.name === "Mann-Whitney U") return "Mann-Whitney U - non-normal data";
-    if (v.test.name === "Kruskal-Wallis") return "Kruskal-Wallis - non-normal data";
-    return v.test.name;
-  };
+  const getDecisionBadge = (v: any) => v.test.name;
+
+  const selectedResult = stats.perVariable.find((v) => v.variable === selectedVariable) ?? null;
+  const journalName = ruleset.journals.find((journal) => journal.journal_id === (journalId || "NEJM"))?.display_name ?? "NEJM";
+  const hasPValue = !plan?.userOverrides?.hidePValueColumn && stats.perVariable.some((v) => v.test.pValue !== null);
+  const hasSmd = stats.perVariable.some((v) => v.smd !== undefined && v.smd !== null);
+  const columnSet = hasPValue && hasSmd ? "P-value + SMD" : hasSmd ? "SMD only" : hasPValue ? "P-value" : "No comparison column";
+  const selectedIsNumeric = selectedResult
+    ? selectedResult.overallSummary.mean !== undefined || selectedResult.overallSummary.median !== undefined
+    : false;
+  const selectedColumn = selectedResult ? schema?.columns.find((column) => column.name === selectedResult.variable) : undefined;
+  const shapiroRaw = selectedResult?.test.auxiliary?.shapiroPValue;
+  const shapiroP = typeof shapiroRaw === "number" ? shapiroRaw : typeof shapiroRaw === "string" ? Number.parseFloat(shapiroRaw) : undefined;
+  const shapiroCaption = shapiroP === undefined || Number.isNaN(shapiroP)
+    ? "Shapiro-Wilk result not available for this variable."
+    : `Shapiro-Wilk p = ${shapiroP < 0.001 ? "< 0.001" : shapiroP.toFixed(2)}`;
+  const observedCounts = selectedResult && !selectedIsNumeric
+    ? Object.keys(selectedResult.overallSummary.counts ?? {}).map((level) => ({
+        level: resolveLevelLabel(level, selectedColumn),
+        counts: stats.groups.map((group) => selectedResult.summaryByGroup[group.name]?.counts?.[level] ?? 0),
+      }))
+    : [];
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
+    <div className="mx-auto max-w-6xl space-y-6 pb-4">
       <AboutThisStep stage="stats" />
-      <h2 className="text-2xl font-bold text-gray-900">Statistical Review</h2>
+      <StepHeader n={5} eyebrow="STATISTICAL REVIEW" title="Statistical Review" lede="This is the table we computed. Each row shows which test was used and why. Open a row to see the diagnostics behind the choice." next="Modeling (optional) or Format & export" />
 
       {mtcAdvice && (
-        <div className={`rounded p-4 text-sm ${
+        <div className={`rounded-xl border p-4 text-sm ${
           mtcAdvice.severity === "strong"
-            ? "border border-red-300 bg-red-50 text-red-700 font-bold"
-            : "border border-amber-300 bg-amber-50 text-amber-800"
+            ? "border-red-200 bg-red-50 text-red-800 font-semibold"
+            : "border-amber-200 bg-amber-50 text-amber-900"
         }`}>
           {mtcAdvice.message}
           {mtcAdvice.severity === "strong" && (
@@ -118,10 +146,10 @@ export default function StatsPreviewStage() {
       )}
 
       {baselineAdvice && (
-        <div className="rounded border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
-          <p>{baselineAdvice.message}</p>
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900" role="note">
+          <p>{baselineAdvice.message.replaceAll("randomised", "randomized").replaceAll("Standardised", "Standardized").replaceAll("standardised", "standardized").replaceAll("P values", "P-values")}</p>
           <div className="mt-3 flex flex-wrap gap-2">
-            {baselineAdvice.smdAvailable && (
+            {baselineAdvice.smdState === "computed" && (
               <button
                 type="button"
                 onClick={() => {
@@ -133,7 +161,24 @@ export default function StatsPreviewStage() {
                 }}
                 className="rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
               >
-                Report standardised differences only
+              Show SMD, hide P-values
+              </button>
+            )}
+            {baselineAdvice.smdState === "rerun_required" && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (!plan) return;
+                  setPlan({
+                    ...plan,
+                    showSMD: true,
+                    userOverrides: { ...(plan.userOverrides ?? {}), hidePValueColumn: true },
+                  });
+                  setStage(6);
+                }}
+                className="rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
+              >
+              Switch on SMD and return to the Analysis Plan
               </button>
             )}
             <button
@@ -141,57 +186,99 @@ export default function StatsPreviewStage() {
               onClick={() => setBaselineAdviceDismissed(true)}
               className="rounded border border-amber-300 bg-white px-3 py-1.5 text-sm font-medium text-amber-900 hover:bg-amber-100"
             >
-              Keep P values
+              Keep P-values
             </button>
           </div>
         </div>
       )}
-      
-      {/* Novice Help Guide */}
-      <details className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-2 text-sm text-blue-900">
-        <summary className="font-semibold cursor-pointer focus:outline-none select-none">
-          About these statistics (Help Guide)
-        </summary>
-        <div className="pt-2 space-y-3">
-          <p>
-            <strong>P-value &amp; 0.05 Convention:</strong> A P-value is the probability of seeing a difference at least as large as the one observed if there were truly no difference between the groups (the null hypothesis). It is not the probability that the groups are the same. By convention, a P-value less than 0.05 is often treated as statistically significant.
-          </p>
-          <p>
-            <strong>Parametric vs. Non-parametric Tests:</strong> Parametric tests (like Welch's t-test and ANOVA) assume the data follow a specific distribution (usually normal). When data violate normality (as flagged by Shapiro-Wilk or skewness checks), we use non-parametric tests (like Mann-Whitney U or Kruskal-Wallis), which do not assume a normal distribution and compare medians or ranks instead of means.
-          </p>
-          <p>
-            <strong>Chi-square vs. Fisher's Exact:</strong> For categorical variables, the Chi-square test evaluates group differences by comparing observed counts with expected counts. However, the Chi-square approximation is unreliable if any expected cell count is small (less than 5). In those cases, we use Fisher's exact test, which computes the exact probability.
-          </p>
-          <p>
-            <strong>Standardized Mean Difference (SMD):</strong> SMD measures the effect size of differences between groups, independent of sample size. An SMD greater than 0.1 is conventionally interpreted as indicating an imbalance between the groups.
-          </p>
+
+      <section className="overflow-hidden rounded-[14px] border border-gray-200 bg-white shadow-sm" aria-label="Table 1 card">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 px-4 py-3.5">
+          <div>
+            <h2 className="text-[15px] font-semibold text-gray-900">Table 1</h2>
+            <p className="mt-1 text-xs text-gray-600">Formatted with {journalName} rules. Change the journal in Format &amp; export.</p>
+          </div>
+          <span className="inline-flex rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">{columnSet}</span>
         </div>
-      </details>
+        <div className="overflow-auto p-4" tabIndex={0} role="region" aria-label="Table 1 preview">
+          {formattedTable ? <HtmlPreview table={formattedTable} /> : <p className="text-sm text-gray-600">Table 1 preview is unavailable. Review the analysis plan and run statistics again.</p>}
+        </div>
+      </section>
+      
+      <div className="space-y-2" role="group" aria-label="Statistical glossary">
+        <div className="flex flex-wrap gap-2">
+          {[
+            ["p", "P-value & 0.05 convention", "A P-value of 0.05 is a convention, not a boundary between true and false. Report exact values and interpret them with effect sizes."],
+            ["parametric", "Parametric vs. non-parametric tests", "Parametric tests (t-test, ANOVA) assume roughly normal data; non-parametric tests (Mann-Whitney U, Kruskal-Wallis) use ranks."],
+            ["chi", "Chi-square vs. Fisher's exact", "Chi-square needs adequate expected counts; Fisher's exact is exact for sparse tables."],
+            ["smd", "Standardized Mean Difference (SMD)", "The size of a group difference in standard-deviation units, independent of sample size. Above 0.1 is conventionally considered imbalanced."],
+          ].map(([id, label]) => (
+            <button key={id} type="button" aria-pressed={activeGlossary === id} onClick={() => setActiveGlossary(activeGlossary === id ? null : id)} className={`rounded-full border px-3 py-1.5 text-xs font-medium focus-visible:outline-2 focus-visible:outline-blue-600 ${activeGlossary === id ? "border-blue-200 bg-blue-50 text-blue-700" : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"}`}>
+              {label}
+            </button>
+          ))}
+        </div>
+        {activeGlossary && (
+          <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900" role="status">
+            {activeGlossary === "p" && "A P-value of 0.05 is a convention, not a boundary between true and false. Report exact values and interpret them with effect sizes."}
+            {activeGlossary === "parametric" && "Parametric tests (t-test, ANOVA) assume roughly normal data; non-parametric tests (Mann-Whitney U, Kruskal-Wallis) use ranks."}
+            {activeGlossary === "chi" && "Chi-square needs adequate expected counts; Fisher's exact is exact for sparse tables."}
+            {activeGlossary === "smd" && "The size of a group difference in standard-deviation units, independent of sample size. Above 0.1 is conventionally considered imbalanced."}
+          </div>
+        )}
+      </div>
 
       {/* Diagnostics Panel Table */}
       <div className="space-y-2">
-        <h3 className="text-lg font-bold text-gray-900">Statistical Diagnostics</h3>
-        <DiagnosticsPanel results={stats} schema={schema ?? undefined} groupingVariable={plan?.groupingVariable} journalId={journalId} />
+        <h3 className="text-lg font-semibold text-gray-900">Statistical Diagnostics</h3>
+        <DiagnosticsPanel results={stats} schema={schema ?? undefined} groupingVariable={plan?.groupingVariable} journalId={journalId} selectedVariable={selectedVariable} onVariableSelect={setSelectedVariable} />
       </div>
 
+      {selectedResult && (
+        <section className="rounded-[14px] border border-gray-200 bg-white p-[18px] shadow-sm" aria-live="polite" aria-labelledby="decision-detail-title">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 id="decision-detail-title" className="text-base font-semibold text-gray-900">Decision detail · {getDisplayVar(selectedResult.variable)}</h2>
+              <p className="mt-1 text-xs font-mono text-gray-600">{selectedResult.test.name} (stat = {selectedResult.test.statistic === null ? "—" : selectedResult.test.statistic.toFixed(2)}, P = {selectedResult.test.pValue === null ? "—" : selectedResult.test.pValue < 0.001 ? "<0.001" : selectedResult.test.pValue.toFixed(3)})</p>
+            </div>
+            <button type="button" onClick={() => setSelectedVariable(null)} className="rounded border border-gray-300 px-3 py-1 text-sm font-medium text-gray-700 hover:bg-gray-50">Close</button>
+          </div>
+          <p className="mt-3 text-sm leading-relaxed text-gray-700">{getRationaleText(selectedResult)}</p>
+          {selectedIsNumeric ? (
+            <figure className="mt-4 rounded-[10px] border border-gray-200 p-2">
+              <DiagnosticThumbnail variable={selectedColumn ?? { name: selectedResult.variable, inferredType: "continuous", confirmedType: "continuous", cardinalityTier: "ok" }} plotData={selectedResult.plotData} plotHeight={130} plotWidth={200} />
+              <figcaption className="mt-2 text-xs text-gray-600">Histogram · {getDisplayVar(selectedResult.variable)} · Q-Q plot · {shapiroCaption}</figcaption>
+            </figure>
+          ) : observedCounts.length > 0 ? (
+            <div className="mt-4 overflow-x-auto">
+              <p className="mb-2 text-xs font-medium text-gray-700">Observed counts by group</p>
+              <table className="border-collapse font-mono text-xs" aria-label="Observed counts by group">
+                <thead className="bg-gray-100"><tr><th className="border border-gray-200 px-2.5 py-1 text-left">Level</th>{stats.groups.map((group) => <th key={group.name} className="border border-gray-200 px-2.5 py-1 text-right">{getDisplayVar(group.name)}</th>)}</tr></thead>
+                <tbody>{observedCounts.map((row) => <tr key={row.level}><th className="border border-gray-200 px-2.5 py-1 text-left font-normal">{row.level}</th>{row.counts.map((count, index) => <td key={`${row.level}-${index}`} className="border border-gray-200 px-2.5 py-1 text-right">{count}</td>)}</tr>)}</tbody>
+              </table>
+            </div>
+          ) : null}
+        </section>
+      )}
+
       {/* Per-Variable Test Choice Rationale */}
-      <div className="bg-white p-6 rounded-lg shadow border space-y-4">
-        <h3 className="text-lg font-bold text-gray-900">Test Selection Rationale</h3>
+      <div className="rounded-[14px] border border-gray-200 bg-white p-[18px] shadow-sm space-y-4">
+        <h3 className="text-[14.5px] font-semibold text-gray-900">Test Selection Rationale</h3>
         <div className="space-y-4">
           {stats.perVariable.map((v) => {
             const varDisplay = getDisplayVar(v.variable);
             const pFormatted = v.test.pValue === null ? '—' : v.test.pValue < 0.001 ? '<0.001' : v.test.pValue.toFixed(3);
             const statFormatted = v.test.statistic === null ? '—' : v.test.statistic.toFixed(2);
             return (
-              <div key={v.variable} className="border-b border-gray-100 pb-4 last:border-b-0 last:pb-0 space-y-1">
+              <div key={v.variable} className="border-t border-gray-200 py-3 space-y-1">
                 <div className="flex items-baseline justify-between">
                   <h4 className="font-semibold text-gray-800">{varDisplay}</h4>
-                  <span className="text-xs text-gray-500 font-mono">
+                  <span className="text-xs text-gray-600 font-mono">
                     {v.test.name} (stat={statFormatted}, p={pFormatted})
                   </span>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="inline-flex rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-800">
+                  <span className="inline-flex rounded-full border border-blue-200 bg-blue-50 px-2 py-px text-[11px] font-semibold text-blue-800">
                     {getDecisionBadge(v)}
                   </span>
                 </div>
@@ -210,30 +297,13 @@ export default function StatsPreviewStage() {
         </div>
       </div>
 
-      {/* Navigation Controls */}
-      <div className="flex justify-between">
-        <button onClick={() => setStage(6)} className="px-4 py-2 border rounded text-gray-700 bg-white hover:bg-gray-50">
-          Back to Analysis plan
-        </button>
-        <div className="flex gap-2">
-        <button
-          onClick={() => {
-            setModelingEnabled(true);
-            setStage(8);
-          }}
-          className="px-4 py-2 border rounded text-gray-700 bg-white hover:bg-gray-50"
-        >
-          Enable Modeling
-        </button>
-        <button 
-          onClick={() => setStage(9)} 
-          data-testid="stats-continue-format-export"
-          className="px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-        >
-          Continue to Format and export
-        </button>
-        </div>
-      </div>
+      <StepActionBar
+        onBack={() => setStage(6)}
+        backLabel="Back to Analysis plan"
+        status={{ tone: "ok", text: `Table 1 computed · ${stats.perVariable.length} rows` }}
+        secondary={{ label: "Enable Modeling", testId: "enable-modeling", onClick: () => { setModelingEnabled(true); setStage(8); } }}
+        primary={{ label: "Continue to Format and export", onClick: () => setStage(9), testId: "stats-continue-format-export" }}
+      />
     </div>
   );
 }

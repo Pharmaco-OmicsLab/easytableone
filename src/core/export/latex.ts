@@ -25,6 +25,12 @@ function escapeLatex(text: string): string {
     .replace(/\^/g, "\\textasciicircum{}");
 }
 
+
+
+/**
+ * Produces a `booktabs`/`threeparttable` LaTeX table block from the supplied formatted display table.
+ * The result is body markup (not a complete document) and requires the packages documented above.
+ */
 export function exportLatex(table: FormattedTable): string {
   const colCount = table.header.length;
   const columnSpec = "l" + "c".repeat(colCount - 1);

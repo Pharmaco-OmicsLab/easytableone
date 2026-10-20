@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState } from "react";
 import type { ResearchPopulation, UnitSystem } from "../../core/bounds/boundsChecker";
 import type { StudyDesign } from "../../core/types";
 import { useStore } from "../../store";
@@ -6,219 +6,39 @@ import DictionaryStage from "./DictionaryStage";
 import SheetHeaderStage from "./SheetHeaderStage";
 import UploadStage from "./UploadStage";
 import { LARGE_N_NOTICE_THRESHOLD, describeLargeNNotice } from "../../core/performance/largeDatasetGuardrails";
+import { ChoiceGroup } from "./import/ChoiceGroup";
+import { SectionCard } from "./import/SectionCard";
+import ContextAside, { type ImportPhase } from "./import/ContextAside";
+import StepHeader from "../layout/StepHeader";
 
-const populationLabels: Record<ResearchPopulation, string> = {
-  adult: "Adult",
-  pediatric: "Pediatric",
-  other: "Other",
-};
-
-const unitLabels: Record<UnitSystem, string> = {
-  metric: "Metric",
-  imperial: "Imperial",
-};
-
-const designLabels: Record<StudyDesign, string> = {
-  unspecified: "Not specified",
-  randomized_trial: "Randomised trial",
-  observational: "Observational",
-  other: "Other design",
-};
-
-function CheckBadge() {
-  return (
-    <span aria-label="Completed" className="flex h-6 w-6 flex-none items-center justify-center rounded-full bg-emerald-50 text-emerald-700">
-      <svg aria-hidden="true" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
-        <path fillRule="evenodd" d="M16.704 5.29a1 1 0 0 1 .006 1.414l-7.25 7.31a1 1 0 0 1-1.42 0L3.29 9.22a1 1 0 1 1 1.42-1.408l4.04 4.075 6.54-6.59a1 1 0 0 1 1.414-.006Z" clipRule="evenodd" />
-      </svg>
-    </span>
-  );
+const populationLabels: Record<ResearchPopulation, string> = { adult: "Adult", pediatric: "Pediatric", other: "Other" };
+const unitLabels: Record<UnitSystem, string> = { metric: "Metric", imperial: "Imperial" };
+const designLabels: Record<StudyDesign, string> = { unspecified: "Design not specified", randomized_trial: "Randomized trial", observational: "Observational", other: "Other design" };
+function StudySettingsPanel({ onDone, doneLabel = "Continue" }: { onDone: () => void; doneLabel?: string }) {
+  const { researchPopulation, setResearchPopulation, unitSystem, setUnitSystem, studyDesign, setStudyDesign, explanationDepth, file, data, sheets, selectedSheet } = useStore();
+  const selectedSheetInfo = sheets.find((sheet) => sheet.name === selectedSheet) ?? sheets[0];
+  const pillRows = data?.rows.length ?? selectedSheetInfo?.rowCount ?? 0;
+  const pillColumns = data?.columns.length ?? selectedSheetInfo?.colCount ?? 0;
+  return <div className="space-y-5">
+    {file && <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-green-200 bg-green-50 px-4 py-3"><div className="min-w-0"><p className="truncate text-sm font-semibold text-green-950">{file.name}</p><p className="text-xs text-green-800">Parsed locally{selectedSheetInfo ? ` · ${selectedSheetInfo.name} · ` : " · "}{pillRows.toLocaleString()} rows × {pillColumns.toLocaleString()} columns</p></div><span aria-hidden="true" className="text-green-700">✓</span></div>}
+    <p className="text-sm text-gray-600">Three quick questions — change them any time.</p>
+    <ChoiceGroup name="import-research-population" question="Who was studied?" hint="Sets plausibility ranges for data checks." value={researchPopulation} onChange={setResearchPopulation} options={[
+      { value: "adult", label: "Adult", description: "Human subjects aged 18 or older." },
+      { value: "pediatric", label: "Pediatric", description: "Human subjects aged 0–17.", note: explanationDepth === "deep" ? <span className="mt-1 block text-xs text-blue-800">Pediatric plausibility ranges are used for data checks.</span> : undefined },
+      { value: "other", label: "Other / non-human", note: researchPopulation === "other" ? <span className="mt-2 block rounded bg-amber-50 p-2 text-xs text-amber-800">Human plausibility-range checks will be turned off. Everything else works the same.</span> : undefined },
+    ]} />
+    <ChoiceGroup name="import-unit-system" question="Which units does the source data use?" value={unitSystem} onChange={setUnitSystem} options={[
+      { value: "metric", label: "Metric (SI)" }, { value: "imperial", label: "Imperial (US)" },
+    ]} />
+    <ChoiceGroup name="import-study-design" question="Study Design" hint="Shapes how baseline differences are reported." value={studyDesign} onChange={setStudyDesign} options={[
+      { value: "unspecified", label: "Not specified" },
+      { value: "randomized_trial", label: "Randomized trial", tag: "SMDs suggested instead of P values" },
+      { value: "observational", label: "Observational" }, { value: "other", label: "Other" },
+    ]} />
+    <p className="text-xs text-gray-500">Recorded in your analysis history and exports.</p>
+    <div className="flex justify-end"><button data-testid="study-settings-continue" type="button" onClick={onDone} className="min-h-10 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">{doneLabel}</button></div>
+  </div>;
 }
-
-function ActiveBadge() {
-  return (
-    <span aria-label="Active" className="flex h-6 w-6 flex-none items-center justify-center rounded-full bg-blue-50 text-blue-700">
-      <span aria-hidden="true" className="h-2.5 w-2.5 rounded-full bg-blue-600 ring-2 ring-blue-200" />
-    </span>
-  );
-}
-
-function PendingBadge() {
-  return (
-    <span aria-label="Pending" className="flex h-6 w-6 flex-none items-center justify-center rounded-full text-gray-400">
-      <span aria-hidden="true" className="h-3 w-3 rounded-full border border-gray-400" />
-    </span>
-  );
-}
-
-function SummaryRow({ title, summary, action, onClick }: { title: string; summary: string; action: string; onClick: () => void }) {
-  return (
-    <div className="rounded-xl border border-gray-200 bg-white px-4 py-3">
-      <div className="flex items-center gap-3">
-        <CheckBadge />
-        <div className="min-w-0 flex-1">
-          <div className="text-sm font-medium text-gray-900">{title}</div>
-          <div className="truncate text-sm text-gray-600">{summary}</div>
-        </div>
-        <button type="button" onClick={onClick} className="rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-800 hover:bg-gray-50">
-          {action}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function PendingRow({ title, summary }: { title: string; summary: string }) {
-  return (
-    <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 opacity-60">
-      <div className="flex items-center gap-3">
-        <PendingBadge />
-        <div className="min-w-0 flex-1">
-          <div className="text-sm font-medium text-gray-600">{title}</div>
-          <div className="truncate text-sm text-gray-500">{summary}</div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ActivePanel({ title, optional, children }: { title: string; optional?: boolean; children: ReactNode }) {
-  return (
-    <section data-testid="import-active-panel" className="rounded-xl border-2 border-blue-500 bg-white px-4 py-4">
-      <div className="mb-4 flex items-center gap-3">
-        <ActiveBadge />
-        <div className="min-w-0 flex-1">
-          <h3 className="text-base font-semibold text-gray-900">
-            {title} {optional && <span className="font-normal text-gray-500">- optional</span>}
-          </h3>
-        </div>
-      </div>
-      {children}
-    </section>
-  );
-}
-
-function StudySettingsPanel({ onDone, doneLabel = "Done" }: { onDone: () => void; doneLabel?: string }) {
-  const { researchPopulation, setResearchPopulation, unitSystem, setUnitSystem, studyDesign, setStudyDesign } = useStore();
-  const populationOptions: Array<{ value: ResearchPopulation; label: string; description: string }> = [
-    {
-      value: "adult",
-      label: "Adult (≥18 years)",
-      description: "Human subjects aged 18 or older, or mixed pediatric/adult cohorts.",
-    },
-    {
-      value: "pediatric",
-      label: "Pediatric (0-17 years)",
-      description: "Human subjects aged 0-17, including neonates and adolescents.",
-    },
-    {
-      value: "other",
-      label: "Other / Non-human",
-      description: "Animal studies, cell cultures, metabolomics, in vitro experiments, or other non-human datasets.",
-    },
-  ];
-  const unitOptions: Array<{ value: UnitSystem; label: string; description: string }> = [
-    { value: "metric", label: "Metric (SI)", description: "kg, cm, mmol/L, umol/L, etc." },
-    { value: "imperial", label: "Imperial (US customary)", description: "lbs, inches, mg/dL, etc." },
-  ];
-  const studyDesignOptions: Array<{ value: StudyDesign; label: string; description: string }> = [
-    {
-      value: "unspecified",
-      label: "Not specified",
-      description: "Skip this question. Baseline characteristics are reported with P values, as today.",
-    },
-    {
-      value: "randomized_trial",
-      label: "Randomised trial",
-      description:
-        "Participants were randomly allocated to groups. EasyTableOne will suggest reporting standardised differences instead of baseline P values.",
-    },
-    {
-      value: "observational",
-      label: "Observational study",
-      description: "Cohort, case-control, cross-sectional, or registry data. Baseline P values are conventional here.",
-    },
-    {
-      value: "other",
-      label: "Other",
-      description: "Any other design, including non-human and experimental datasets.",
-    },
-  ];
-
-  return (
-    <div className="space-y-5">
-      <section>
-        <h4 className="mb-2 text-sm font-semibold text-gray-900">Study Population</h4>
-        <div className="space-y-2" role="radiogroup" aria-label="Study Population">
-          {populationOptions.map((option) => (
-            <label key={option.value} className="flex items-start gap-3 rounded-md border border-gray-200 p-3 hover:bg-gray-50">
-              <input
-                type="radio"
-                name="import-research-population"
-                value={option.value}
-                checked={researchPopulation === option.value}
-                onChange={() => setResearchPopulation(option.value)}
-                className="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-500"
-              />
-              <span>
-                <span className="block text-sm font-semibold text-gray-900">{option.label}</span>
-                <span className="block text-sm text-gray-600">{option.description}</span>
-              </span>
-            </label>
-          ))}
-        </div>
-      </section>
-      <section>
-        <h4 className="mb-2 text-sm font-semibold text-gray-900">Measurement Units</h4>
-        <div className="space-y-2" role="radiogroup" aria-label="Measurement Units">
-          {unitOptions.map((option) => (
-            <label key={option.value} className="flex items-start gap-3 rounded-md border border-gray-200 p-3 hover:bg-gray-50">
-              <input
-                type="radio"
-                name="import-unit-system"
-                value={option.value}
-                checked={unitSystem === option.value}
-                onChange={() => setUnitSystem(option.value)}
-                className="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-500"
-              />
-              <span>
-                <span className="block text-sm font-semibold text-gray-900">{option.label}</span>
-                <span className="block text-sm text-gray-600">{option.description}</span>
-              </span>
-            </label>
-          ))}
-        </div>
-      </section>
-      <section>
-        <h4 className="mb-2 text-sm font-semibold text-gray-900">Study Design</h4>
-        <div className="space-y-2" role="radiogroup" aria-label="Study Design">
-          {studyDesignOptions.map((option) => (
-            <label key={option.value} className="flex items-start gap-3 rounded-md border border-gray-200 p-3 hover:bg-gray-50">
-              <input
-                type="radio"
-                name="import-study-design"
-                value={option.value}
-                checked={studyDesign === option.value}
-                onChange={() => setStudyDesign(option.value)}
-                className="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-600"
-              />
-              <span>
-                <span className="block text-sm font-semibold text-gray-900">{option.label}</span>
-                <span className="block text-sm text-gray-700">{option.description}</span>
-              </span>
-            </label>
-          ))}
-        </div>
-      </section>
-      <div className="flex justify-end">
-        <button data-testid="study-settings-continue" type="button" onClick={onDone} className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">
-          {doneLabel}
-        </button>
-      </div>
-    </div>
-  );
-}
-
 export default function ImportStage() {
   const {
     stage,
@@ -236,6 +56,7 @@ export default function ImportStage() {
     setSheets,
     setSelectedSheet,
     setSchema,
+    setDataQualityRecords,
     setError,
     error,
   } = useStore();
@@ -243,12 +64,11 @@ export default function ImportStage() {
   const isCSV = file?.name.toLowerCase().endsWith(".csv") ?? false;
   const rowCount = data?.rows.length ?? sheets[0]?.rowCount ?? 0;
   const colCount = data?.columns.length ?? sheets[0]?.colCount ?? 0;
-  const fileSummary = file ? `${file.name} - ${rowCount.toLocaleString()} rows x ${colCount.toLocaleString()} columns` : "";
+  const fileSummary = file ? `${file.name} · ${rowCount.toLocaleString()} rows × ${colCount.toLocaleString()} columns` : "";
   const headerSummary = isCSV
     ? `Row ${headerRowIndex + 1} (no sheet to pick - single CSV)`
     : `Sheet "${selectedSheet ?? sheets[0]?.name ?? "Data"}" - header on row ${headerRowIndex + 1}`;
-  const designSuffix = studyDesign === "unspecified" ? "" : ` - ${designLabels[studyDesign]}`;
-  const studySettingsSummary = `${populationLabels[researchPopulation]} population - ${unitLabels[unitSystem]} units${designSuffix}`;
+  const studySettingsSummary = `${populationLabels[researchPopulation]} · ${unitLabels[unitSystem]} units · ${studyDesign === "unspecified" ? designLabels.unspecified : designLabels[studyDesign]}`;
 
   const replaceFile = () => {
     setStage(1);
@@ -258,6 +78,7 @@ export default function ImportStage() {
     setSelectedSheet(null);
     setSchema(null);
     setError(null);
+    setDataQualityRecords([]);
   };
   const hasParsedFile = Boolean(file && !error && (data || sheets.length > 0));
   const fileActive = stage === 1 && (!hasParsedFile || Boolean(error));
@@ -265,94 +86,37 @@ export default function ImportStage() {
   const showLargeFileWarning = Boolean(file && file.size > 25 * 1024 * 1024);
   const showLargeNNotice = Boolean(hasParsedFile && data && data.rows.length > LARGE_N_NOTICE_THRESHOLD);
 
-  return (
-    <div className="mx-auto max-w-3xl">
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900">Import data</h2>
-          <p className="mt-1 text-sm text-gray-600">Finished steps collapse so only the step you are on is expanded.</p>
-        </div>
-        <span className="text-sm text-gray-500">Step 1 of 7 - Variable types next</span>
-      </div>
+  const fileStatus = fileActive ? "active" : hasParsedFile ? "done" : "pending";
+  const studyStatus = studyActive || settingsOpen ? "active" : hasParsedFile && stage >= 2 ? "done" : "pending";
+  const headerStatus = stage === 2 && !settingsOpen ? "active" : stage > 2 ? "done" : "pending";
+  const dictionaryStatus = stage === 3 && !settingsOpen ? "active" : stage > 3 ? "done" : "pending";
+  const activePhase: ImportPhase = fileStatus === "active" ? "file" : studyStatus === "active" ? "study" : headerStatus === "active" ? "header" : "dictionary";
+  const pageHeading: Record<ImportPhase, { title: string; lede: string }> = {
+    file: { title: "Every good table starts with data.", lede: "CSV or Excel, one row per participant. Choose a file to get started." },
+    study: { title: "Tell us about your study", lede: "Three quick questions help EasyTableOne interpret your data." },
+    header: { title: "Let's check the layout", lede: "Choose the data sheet and the row that contains your column names." },
+    dictionary: { title: "Add labels, if you have them", lede: "A dictionary can add readable labels and units. This step is optional." },
+  };
+  useEffect(() => {
+    if (activePhase === "file") return;
+    requestAnimationFrame(() => document.querySelector<HTMLElement>('[data-testid="import-active-panel"] h2')?.focus());
+  }, [activePhase]);
 
-      {(showLargeFileWarning || showLargeNNotice || error) && (
-        <div className="mb-4 space-y-3">
-          {showLargeFileWarning && file && (
-            <div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-              This file is {(file.size / (1024 * 1024)).toFixed(1)} MB. EasyTableOne uses your browser's memory and CPU, so later steps may take longer on very large files.
-            </div>
-          )}
-          {showLargeNNotice && data && (
-            <div className="rounded-md border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">
-              {describeLargeNNotice(data.rows.length)}
-            </div>
-          )}
-          {error && (
-            <div className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-              {error}
-            </div>
-          )}
-        </div>
-      )}
-
-      <div className="space-y-3">
-        <div data-testid="import-section-file" data-state={fileActive ? "active" : hasParsedFile ? "done" : "pending"}>
-          {fileActive ? (
-            <ActivePanel title="File">
-              <UploadStage embedded />
-            </ActivePanel>
-          ) : hasParsedFile ? (
-            <SummaryRow title="File" summary={fileSummary} action="Replace" onClick={replaceFile} />
-          ) : (
-            <PendingRow title="File" summary="Upload a CSV or XLSX file" />
-          )}
-        </div>
-
-        <div data-testid="import-section-study" data-state={studyActive || settingsOpen ? "active" : hasParsedFile && stage >= 2 ? "done" : "pending"}>
-          {studyActive ? (
-            <ActivePanel title="Study settings">
-              <StudySettingsPanel onDone={() => setStage(2)} doneLabel="Continue to sheet & header" />
-            </ActivePanel>
-          ) : hasParsedFile && stage >= 2 ? (
-            settingsOpen ? (
-              <ActivePanel title="Study settings">
-                <StudySettingsPanel onDone={() => setSettingsOpen(false)} />
-              </ActivePanel>
-            ) : (
-              <SummaryRow
-                title="Study settings"
-                summary={studySettingsSummary}
-                action="Edit"
-                onClick={() => setSettingsOpen(true)}
-              />
-            )
-          ) : (
-            <PendingRow title="Study settings" summary="Confirm population and measurement units after upload" />
-          )}
-        </div>
-
-        <div data-testid="import-section-header" data-state={stage === 2 && !settingsOpen ? "active" : stage > 2 ? "done" : "pending"}>
-          {stage === 2 && !settingsOpen ? (
-            <ActivePanel title="Sheet & header row">
-              <SheetHeaderStage embedded />
-            </ActivePanel>
-          ) : stage > 2 ? (
-            <SummaryRow title={isCSV ? "Header row" : "Sheet & header row"} summary={headerSummary} action="Edit" onClick={() => setStage(2)} />
-          ) : (
-            <PendingRow title="Sheet & header row" summary="Confirm the header before dictionary import" />
-          )}
-        </div>
-
-        <div data-testid="import-section-dictionary" data-state={stage === 3 && !settingsOpen ? "active" : stage > 3 ? "done" : "pending"}>
-          {stage === 3 && !settingsOpen ? (
-            <ActivePanel title="Data dictionary" optional>
-              <DictionaryStage embedded />
-            </ActivePanel>
-          ) : stage < 3 ? (
-            <PendingRow title="Data dictionary" summary="Optional codebook import opens next" />
-          ) : null}
-        </div>
+  return <div className="grid gap-6 min-[1181px]:grid-cols-[minmax(0,1fr)_300px]">
+    <div className="min-w-0">
+      <StepHeader n={1} eyebrow="IMPORT DATA" title={pageHeading[activePhase].title} lede={pageHeading[activePhase].lede} next="Variable types" />
+      {(showLargeFileWarning || showLargeNNotice || error) && <div className="mb-4 space-y-3" role={error ? "alert" : "status"}>
+        {showLargeFileWarning && file && <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">This file is {(file.size / (1024 * 1024)).toFixed(1)} MB. EasyTableOne uses your browser's memory and CPU, so later steps may take longer on very large files.</div>}
+        {showLargeNNotice && data && <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">{describeLargeNNotice(data.rows.length)}</div>}
+        {error && <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800">{error}</div>}
+      </div>}
+      <div className="space-y-4">
+        <div data-testid="import-section-file" data-state={fileStatus}><SectionCard n={1} title="File" status={fileStatus} summary={fileSummary} action="Replace" onAction={replaceFile} activePanel={fileStatus === "active"}>{fileStatus === "active" && <UploadStage embedded />}</SectionCard></div>
+        <div data-testid="import-section-study" data-state={studyStatus}><SectionCard n={2} title="Study settings" status={studyStatus} summary={studySettingsSummary} action="Edit" onAction={() => setSettingsOpen(true)} activePanel={studyStatus === "active"}>{studyStatus === "active" && <StudySettingsPanel onDone={() => settingsOpen ? setSettingsOpen(false) : setStage(2)} doneLabel={settingsOpen ? "Done" : "Continue"} />}</SectionCard></div>
+        <div data-testid="import-section-header" data-state={headerStatus}><SectionCard n={3} title={isCSV ? "Header row" : "Sheet & header"} status={headerStatus} summary={headerSummary} action="Edit" onAction={() => setStage(2)} activePanel={headerStatus === "active"}>{headerStatus === "active" && <SheetHeaderStage embedded />}</SectionCard></div>
+        <div data-testid="import-section-dictionary" data-state={dictionaryStatus}><SectionCard n={4} title="Data dictionary" optional status={dictionaryStatus} summary="Optional · add labels and units" activePanel={dictionaryStatus === "active"}>{dictionaryStatus === "active" && <DictionaryStage embedded />}</SectionCard></div>
       </div>
     </div>
-  );
+    <ContextAside phase={activePhase} />
+  </div>;;
 }

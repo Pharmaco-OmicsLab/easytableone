@@ -79,7 +79,7 @@ const schema: Schema = {
 };
 
 const FIXED_TIMESTAMP = '2026-05-10T00:00:00.000Z';
-const MATERIALS_DIR = resolve(__dirname, '../../../_materials');
+const PUBLIC_SAMPLES_DIR = resolve(__dirname, '../../../public/samples');
 
 describe('generateAnalysisHistory', () => {
   it('produces exactly one block per variable', () => {
@@ -286,6 +286,25 @@ describe('generateAnalysisHistory', () => {
     expect(script).toContain("- Group sizes: Yes n=29, No n=108");
   });
 
+  it('keeps small-category levels and counts in DATA QUALITY NOTES', () => {
+    const record: DataQualityRecord = {
+      finding: {
+        checkId: "smallCategoryLevel_skin",
+        tier: "advisory",
+        category: "quality",
+        variable: "[c9]SkinColor",
+        title: "Small Category",
+        detail: "Variable 'Skin color': level 'C' has n = 3, fewer than 10 observations. Percentages for this level are unstable and the level may make the table sparse.",
+        remedy: "Consider combining this level with a related one in your source data, or report it with care. This is advisory; the analysis is unchanged.",
+      },
+      response: "acknowledged",
+      timestamp: FIXED_TIMESTAMP,
+    };
+    const script = generateAnalysisHistory(plan, results, schema, { filename: 'data.xlsx' }, FIXED_TIMESTAMP, [record]);
+    expect(script).toContain("DATA QUALITY NOTES");
+    expect(script).toContain("level 'C' has n = 3");
+  });
+
   it('formats variable comments honoring plan userOverrides', () => {
     const planWithOverrides = {
       ...plan,
@@ -457,7 +476,7 @@ describe('generateAnalysisHistory', () => {
       'NEJM',
       modelingResults,
     );
-    const csv = readFileSync(resolve(MATERIALS_DIR, 'samples/HF dataset/heart_failure_clinical_records_dataset.csv'), 'utf8');
+    const csv = readFileSync(resolve(PUBLIC_SAMPLES_DIR, 'heart_failure_clinical_records_dataset.csv'), 'utf8');
     await pyodideClient.call('run_python', [`open("heart_failure_clinical_records_dataset.csv", "w", encoding="utf-8").write(${JSON.stringify(csv)})`]);
     const output = await pyodideClient.call('run_python', [`
 import contextlib
@@ -479,4 +498,113 @@ _buf.getvalue()
     expect(Number(aucMatch?.[1])).toBeGreaterThanOrEqual(0.74);
     expect(Number(aucMatch?.[1])).toBeLessThanOrEqual(0.78);
   }, 120000);
+
+  it('executes emitted scripts for every journal with and without modeling', async () => {
+    await pyodideClient.isReady();
+    const journals = ['NEJM', 'JAMA', 'LANCET', 'NATURE_MED', 'GENERIC'] as const;
+    const runPlan: AnalysisPlan = {
+      ...plan,
+      groupingVariable: 'Outcome',
+      includedVariables: ['Age'],
+    };
+    const runSchema: Schema = {
+      columns: [
+        { name: 'Outcome', inferredType: 'binary', confirmedType: 'binary', cardinalityTier: 'ok', levels: [{ code: 0, label: 'No' }, { code: 1, label: 'Yes' }] },
+        { name: 'Age', inferredType: 'continuous', confirmedType: 'continuous', cardinalityTier: 'ok' },
+      ],
+    };
+    const runResults: StatisticalResults = {
+      ...results,
+      perVariable: [{
+        variable: 'Age',
+        summaryByGroup: {
+          No: { mean: 40, sd: 2, median: 40, q25: 39, q75: 41, n: 10 },
+          Yes: { mean: 45, sd: 2, median: 45, q25: 44, q75: 46, n: 10 },
+        },
+        overallSummary: { mean: 42.5, sd: 3, median: 42.5, q25: 40, q75: 45, n: 20 },
+        test: { name: 'Mann-Whitney U', statistic: 1, pValue: 0.01 },
+        notes: [],
+      }],
+      groups: [{ name: 'No', n: 10 }, { name: 'Yes', n: 10 }],
+      totalN: 20,
+    };
+    const csv = ['Outcome,Age', ...Array.from({ length: 20 }, (_, i) => `${i < 10 ? 'No' : 'Yes'},${35 + i}`)].join('\n');
+    await pyodideClient.call('run_python', [`open("analysis_history_smoke.csv", "w", encoding="utf-8").write(${JSON.stringify(csv)})`]);
+    const modelingResults: ModelingResults = {
+      schemaFingerprint: 'smoke',
+      generatedAt: FIXED_TIMESTAMP,
+      setup: {
+        outcome: 'Outcome', outcomePositiveLevel: 'Yes', predictors: ['Age'], referenceLevels: {},
+        imputation: { policy: 'complete_case', m: 1 }, goal: 'adjust', seed: 7, model: 'ridge',
+        lambdaRule: 'lambda_1se', validationB: 1, ciBootstrapB: 1, fastMode: true,
+      },
+      logistic: {
+        regime: { n: 20, events: 10, nonevents: 10, p: 1, epv: 10, pGeN: false, recommendedModels: ['ridge'], plainMleAllowed: true, rationale: 'Smoke test.' },
+        univariate: [], adjusted: [], equation: '', selected: [], model: 'ridge', lambda: 1,
+        diagnostics: {}, validation: null,
+      },
+      ml: null,
+    };
+
+    for (const journal of journals) {
+      for (const withModeling of [false, true]) {
+        const script = generateAnalysisHistory(
+          runPlan, runResults, runSchema, { filename: 'analysis_history_smoke.csv' }, FIXED_TIMESTAMP,
+          [], journal, withModeling ? modelingResults : undefined,
+        );
+        const output = await pyodideClient.call('run_python', [`
+import contextlib, io
+_buf = io.StringIO()
+with contextlib.redirect_stdout(_buf):
+    exec(${JSON.stringify(script)}, {})
+_buf.getvalue()
+`]) as string;
+        expect(typeof output).toBe('string');
+        if (withModeling) expect(output).toContain('Modeling fit complete:');
+      }
+    }
+  }, 180000);
+
+  it('Phase 50 R3: analysis history exports post-hoc caveat comment and unequal-variance contradiction warning', () => {
+    const targetVar = results.perVariable[0].variable;
+    const overridePlan: AnalysisPlan = {
+      ...plan,
+      testOverrides: [{ variable: targetVar, method: 'oneway_anova', timestamp: '2026-09-28T00:00:00.000Z' }],
+    };
+    const caveatResults: StatisticalResults = {
+      ...results,
+      perVariable: [{
+        ...results.perVariable[0],
+        test: {
+          name: 'ANOVA',
+          statistic: 5.5,
+          pValue: 0.01,
+          auxiliary: {
+            assumptionCheckContradicted: 'true',
+            contradictionReason: 'unequal_variance',
+            levenePValue: 0.002,
+          },
+        },
+        postHoc: {
+          reason: 'ANOVA significant (p=0.01); 3 groups',
+          correction: 'tukey',
+          method: 'tukey_hsd',
+          pairs: [{ groupA: 'Group1', groupB: 'Group2', pValueRaw: 0.01, pValueCorrected: 0.01, significant: true }],
+          caveat: 'Tukey HSD assumes equal variances, which the Levene/Brown-Forsythe check did not support for this variable; pairwise P values should be interpreted with caution.',
+        },
+      }],
+    };
+
+    const script = generateAnalysisHistory(
+      overridePlan,
+      caveatResults,
+      schema,
+      { filename: 'data.xlsx' },
+      FIXED_TIMESTAMP,
+    );
+
+    expect(script).toContain('# Levene/Brown-Forsythe p = 0.00 indicates unequal group variances; one-way ANOVA assumes equal variances, so its P-value may be unreliable. Welch\'s ANOVA is the indicated alternative but is not available in this release.');
+    expect(script).not.toContain('Shapiro–Wilk');
+    expect(script).toContain('# Tukey HSD assumes equal variances, which the Levene/Brown-Forsythe check did not support for this variable; pairwise P values should be interpreted with caution.');
+  });
 });

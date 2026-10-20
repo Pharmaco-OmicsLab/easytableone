@@ -8,6 +8,7 @@ import { parseCSV } from "../src/core/parser/csv";
 import { inferSchema } from "../src/core/schema/inference";
 
 const MATERIALS_DIR = path.resolve(__dirname, "../_materials");
+const INTERNAL_BABIES = path.join(MATERIALS_DIR, "samples", "babies.csv");
 
 function getFile(filename: string): File {
   const directPath = path.join(MATERIALS_DIR, filename);
@@ -683,6 +684,7 @@ pooled = _pool_rubin(
     expect(ci.x[1]).toBeGreaterThan(coef.x);
   }, 120_000);
 
+  describe.skipIf(!fs.existsSync(INTERNAL_BABIES))("internal fixture: babies.csv (modeling imputation)", () => {
   it("runs simple imputation policies on babies.csv without dropping predictor-missing rows", async () => {
     const fixture = await loadBabiesFixture();
     const outcomeIndex = fixture.data.columns.findIndex((column) => column.name === "smoke");
@@ -741,6 +743,7 @@ pooled = _pool_rubin(
       expect(result.adjusted.length).toBeGreaterThan(0);
     }
   }, 300_000);
+  });
 
   it("uses the outcome helper in inference-path multivariate imputers without leaking it into the design", async () => {
     await pyodideClient.isReady();
@@ -934,6 +937,7 @@ filled, unmatched = _simple_impute_frame(df, schema, setup, "constant")
     expect(plain.unmatched).toEqual([]);
   }, 120_000);
 
+  describe.skipIf(!fs.existsSync(INTERNAL_BABIES))("internal fixture: babies.csv (Rubin pooled inference)", () => {
   it("returns Rubin pooled inference for MICE plain logistic on babies.csv", async () => {
     const fixture = await loadBabiesFixture();
     const stressData: DataFrame = {
@@ -975,6 +979,7 @@ filled, unmatched = _simple_impute_frame(df, schema, setup, "constant")
       .filter(([, width]) => Number.isFinite(width));
     expect(miceWidths.some(([label, width]) => width > (completeWidths.get(label) ?? Number.POSITIVE_INFINITY))).toBe(true);
   }, 240_000);
+  });
 
   it("uses >=50% variable-level voting for penalized MICE selection", async () => {
     await pyodideClient.isReady();

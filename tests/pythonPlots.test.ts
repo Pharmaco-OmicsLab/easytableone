@@ -11,7 +11,7 @@ const themes = Object.fromEntries(
 describe('Python Static Plots Rendering Integration & Visual Regression', () => {
   beforeAll(async () => {
     await pyodideClient.isReady();
-  }, 60000);
+  });
 
   it('renders a continuous variable histogram as base64 PNG', async () => {
     const data = {
@@ -238,7 +238,10 @@ json.dumps(render_plot(plot_debug_data, "qqplot", theme, 3.0, 2.0, dpi, False, "
     expect(debug.legend_locs.every((loc: number) => loc === 0)).toBe(true);
   }, 60000);
 
-  it('verifies visual regression of G1 boxplot against reference', async () => {
+  it.skipIf(!fs.existsSync(path.resolve(__dirname, '../spikes/round13/output/data_clean.json')) ||
+    !fs.existsSync(path.resolve(__dirname, '../spikes/round14_d49/output/g1_boxplot_pyodide.png')))(
+    'verifies visual regression of G1 boxplot against reference (internal fixtures: spikes/round13/output/data_clean.json, spikes/round14_d49/output/g1_boxplot_pyodide.png)',
+    async () => {
     // 1. Load the same input data as the spike
     const dataCleanPath = path.resolve(__dirname, '../spikes/round13/output/data_clean.json');
     const dataClean = JSON.parse(fs.readFileSync(dataCleanPath, 'utf-8'));

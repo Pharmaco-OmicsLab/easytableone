@@ -9,16 +9,31 @@ import { getColumnDisplayLabel, resolveLevelLabel } from './columnLabel';
 import { formatStatisticalNumber, formatStatisticalNumberAtPrecision, numberFormatFromJournalConfig, resolveRowPrecision } from './numberFormat';
 import { getEffectiveJournalSettings } from './getEffectiveJournalSettings';
 import { categoricalDisplayLevels, reorderLevelsTailLast } from './levelOrdering';
+import { formatPValue } from './formatTable';
+
+
 
 export function getContinuousFormatter(
   journalId: string = 'NEJM',
   overrides?: UserOverrides,
 ): {
+
+
   fmt: (value: number) => string;
+
+
   fmtAtPrecision: (value: number, precision: number) => string;
+
+
   resolvePrecision: (values: readonly number[]) => number;
   iqrDelimiter: string;
   normalTemplate: string;
+  categoricalSummary: string;
+  percentageDecimals: number;
+  percentageDecimalsRule?: { below_n: number; decimals: number };
+
+
+  formatP: (value: number | null) => string;
 } {
   const journalConfig = getEffectiveJournalSettings(journalId, overrides);
 
@@ -45,6 +60,15 @@ export function getContinuousFormatter(
     resolvePrecision: (values: readonly number[]) => resolveRowPrecision(values, numFmtOpts),
     iqrDelimiter,
     normalTemplate,
+    categoricalSummary: journalConfig.summary_statistics.categorical,
+    // Diagnostics CSV historically uses one decimal for ordinary journals;
+    // rulesets can opt into a distinct base precision when they define a
+    // conditional rule (currently JAMA's D108 N<100 rule).
+    percentageDecimals: journalConfig.summary_statistics.percentage_decimals_rule
+      ? journalConfig.summary_statistics.percentage_decimals
+      : 1,
+    percentageDecimalsRule: journalConfig.summary_statistics.percentage_decimals_rule,
+    formatP: (value) => formatPValue(value, journalConfig.p_value_formatting),
   };
 }
 
@@ -90,7 +114,10 @@ export function generateDiagnosticsCsv(
   journalId?: string,
   overrides?: UserOverrides,
 ): string {
-  const { fmtAtPrecision, resolvePrecision, iqrDelimiter, normalTemplate } = getContinuousFormatter(journalId, overrides);
+  const {
+    fmtAtPrecision, resolvePrecision, iqrDelimiter, normalTemplate, categoricalSummary,
+    percentageDecimals, percentageDecimalsRule, formatP,
+  } = getContinuousFormatter(journalId, overrides);
 
   const groupingSchemaCol = schema && groupingVariable
     ? schema.columns.find((c) => c.name === groupingVariable)
@@ -113,7 +140,7 @@ export function generateDiagnosticsCsv(
       ? (v.test.name === 'Mann-Whitney U' || v.test.name === 'Kruskal-Wallis'
         ? 'Median (IQR)'
         : 'Mean (SD)')
-      : 'n (%)';
+      : categoricalSummary;
 
     const schemaCol = schema?.columns.find((c) => c.name === v.variable);
     const rowValues: number[] = [];
@@ -180,7 +207,10 @@ export function generateDiagnosticsCsv(
               .map((k) => {
                 const n = counts[k] ?? 0;
                 const label = resolveLevelLabel(k, schemaCol);
-                return `${label}: ${n} (${(pcts[k] ?? 0).toFixed(1)}%)`;
+                const decimals = percentageDecimalsRule && Number(gs['n'] ?? 0) < percentageDecimalsRule.below_n
+                  ? percentageDecimalsRule.decimals
+                  : percentageDecimals;
+                return `${label}: ${n} (${(pcts[k] ?? 0).toFixed(decimals)}%)`;
               })
               .join('; ')
           ));
@@ -201,7 +231,7 @@ export function generateDiagnosticsCsv(
       csvCell(displayLabel),
       csvCell(v.test.name),
       csvCell(v.test.statistic),
-      csvCell(v.test.pValue),
+      csvCell(formatP(v.test.pValue)),
       csvCell(v.overallSummary['n'] ?? ''),
       csvCell(summaryType),
       ...perGroupCells,

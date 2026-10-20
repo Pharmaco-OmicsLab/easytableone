@@ -4,16 +4,18 @@ import { useStore } from "../../store";
 import { getColumnDisplayLabel } from "../../core/format/columnLabel";
 import { stripBracketCodes } from "../../core/format/tableTitle";
 import { exportDataQualityDocx, exportDataQualityPdf } from "../../core/export/dataQualityExport";
+import { useToast } from "../layout/Toast";
 
 export interface DataQualityGatePanelProps {
   findings: DataQualityFinding[];
   acknowledgedIds: Set<string>;
   dismissedIds: Set<string>;
-  onAcknowledge: (checkId: string) => void;
+  onAcknowledge: (checkId: string, acknowledged: boolean) => void;
   acknowledgeReasons?: Record<string, string>;
   onAcknowledgeReasonChange?: (checkId: string, reason: string) => void;
   onDismiss: (checkId: string) => void;
   onReupload: () => void;
+  onGoToVariableTypes?: () => void;
   /** Optional: opens the TutorialModal without navigating away. */
   onOpenTutorial?: () => void;
 }
@@ -27,9 +29,11 @@ export function DataQualityGatePanel({
   onAcknowledgeReasonChange,
   onDismiss,
   onReupload,
+  onGoToVariableTypes,
   onOpenTutorial,
 }: DataQualityGatePanelProps) {
   const { schema, updateSchemaColumn, qaReport, edaResults } = useStore();
+  const toast = useToast();
 
   const getDisplayVarName = (f: DataQualityFinding) => {
     if (!f.variable) return "";
@@ -78,7 +82,7 @@ export function DataQualityGatePanel({
 
   const blockingFindings = findings.filter((f) => f.tier === "blocking");
   const reviewFindings = findings.filter((f) => f.tier === "review");
-  const advisoryFindings = findings.filter((f) => f.tier === "advisory" && !dismissedIds.has(f.checkId));
+  const advisoryFindings = findings.filter((f) => f.tier === "advisory");
 
   const hasBlocking = blockingFindings.length > 0;
   const hasReview = reviewFindings.length > 0;
@@ -136,6 +140,7 @@ export function DataQualityGatePanel({
       a.download = `data_quality_report_${Date.now()}.docx`;
       a.click();
       URL.revokeObjectURL(url);
+      toast("Data quality report (.docx) downloaded");
     } catch (e) {
       console.error(e);
       alert("Failed to export Word document.");
@@ -152,8 +157,8 @@ export function DataQualityGatePanel({
   };
 
   return (
-    <div className="space-y-6">
-      <div className="bg-white rounded-lg p-6 shadow-sm border border-gray-100 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div className="space-y-4">
+      <div className="bg-white rounded-[14px] p-5 shadow-sm border border-gray-200 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div className="flex-1">
           <h3 className="text-lg font-bold text-gray-900 mb-2">Data Quality Gate</h3>
           <p className="text-sm text-gray-600">
@@ -165,7 +170,7 @@ export function DataQualityGatePanel({
             onClick={handleExportDocx}
             className="px-3 py-1.5 border border-gray-300 text-xs font-semibold rounded text-gray-700 bg-white hover:bg-gray-50 shadow-sm transition-colors"
           >
-            Export Word (.docx)
+            Download Word (.docx)
           </button>
           <button
             onClick={handleExportPdf}
@@ -220,8 +225,8 @@ export function DataQualityGatePanel({
 
       {/* 1. BLOCKING SECTION */}
       {blockingFindings.length === 0 ? (
-        <div className="flex items-center justify-between p-4 bg-gray-50 text-gray-500 border border-gray-200 rounded-lg">
-          <span className="font-bold text-sm">Blocking Issues: None</span>
+          <div className="flex items-center justify-between p-4 bg-gray-100 text-gray-700 border border-gray-200 rounded-lg">
+          <span className="font-bold text-sm">Blocking Issues: None</span><span className="rounded-full bg-green-50 px-2 py-0.5 text-xs font-semibold text-green-700">Clear</span>
         </div>
       ) : (
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
@@ -246,7 +251,7 @@ export function DataQualityGatePanel({
           {blockingExpanded && (
             <div className="p-4 space-y-4 divide-y divide-gray-100">
               {blockingFindings.map((f) => (
-                <div key={f.checkId} className="pt-4 first:pt-0 space-y-2">
+                <div key={f.checkId} className="rounded-xl border border-gray-200 p-4 first:pt-4 space-y-3">
                   <div className="flex items-start justify-between">
                     <div>
                       <h4 className="text-sm font-bold text-red-700">{f.title}</h4>
@@ -263,6 +268,7 @@ export function DataQualityGatePanel({
                           >
                             Exclude Column
                           </button>
+                          {onGoToVariableTypes && <button type="button" onClick={onGoToVariableTypes} className="rounded-lg border border-gray-300 px-2 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50">Go to Variable types</button>}
                         </div>
                       )}
                     </div>
@@ -320,8 +326,8 @@ export function DataQualityGatePanel({
 
       {/* 2. REVIEW SECTION */}
       {reviewFindings.length === 0 ? (
-        <div className="flex items-center justify-between p-4 bg-gray-50 text-gray-500 border border-gray-200 rounded-lg">
-          <span className="font-bold text-sm">Review Needed: None</span>
+        <div className="flex items-center justify-between p-4 bg-gray-100 text-gray-700 border border-gray-200 rounded-lg">
+          <span className="font-bold text-sm">Review Needed: None</span><span className="rounded-full bg-green-50 px-2 py-0.5 text-xs font-semibold text-green-700">Clear</span>
         </div>
       ) : (
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
@@ -348,7 +354,7 @@ export function DataQualityGatePanel({
               {reviewFindings.map((f) => {
                 const isAcked = acknowledgedIds.has(f.checkId);
                 return (
-                  <div key={f.checkId} className="pt-4 first:pt-0 space-y-2">
+                  <div key={f.checkId} className={`rounded-xl border border-gray-200 p-4 first:pt-4 space-y-3 ${isAcked ? "bg-gray-100 opacity-75" : "bg-white"}`}>
                     <div className="flex items-start justify-between">
                       <div>
                         <h4 className="text-sm font-bold text-amber-700">{f.title}</h4>
@@ -368,24 +374,16 @@ export function DataQualityGatePanel({
                           </div>
                         )}
                       </div>
-                      {!isAcked ? (
-                        <button
-                          onClick={() => onAcknowledge(f.checkId)}
-                          className="px-3 py-1 text-xs font-semibold bg-amber-600 text-white rounded hover:bg-amber-700 transition-colors"
-                        >
-                          Acknowledge
-                        </button>
-                      ) : (
-                        <span className="px-2 py-1 text-xs font-semibold bg-green-100 text-green-800 rounded">
-                          ✓ Acknowledged
-                        </span>
-                      )}
+                      <label className="flex items-center gap-2 text-xs font-medium text-gray-700">
+                        <input type="checkbox" checked={isAcked} onChange={(event) => onAcknowledge(f.checkId, event.target.checked)} className="accent-blue-600" />
+                        I acknowledge this issue
+                      </label>
                     </div>
                     <p className="text-sm text-gray-700">{f.detail}</p>
                     <p className="text-xs text-gray-500 italic">
                       <strong>How to fix it:</strong> {f.remedy}
                     </p>
-                    <label className="block pt-1 text-xs font-medium text-gray-700">
+                    {isAcked && <label className="block pt-1 text-xs font-medium text-gray-700">
                       Optional acknowledgement reason
                       <textarea
                         value={acknowledgeReasons[f.checkId] ?? ""}
@@ -393,9 +391,10 @@ export function DataQualityGatePanel({
                         placeholder="Example: reviewed source file; values are expected for this cohort."
                         maxLength={300}
                         rows={2}
-                        className="mt-1 w-full rounded border border-gray-300 p-2 text-sm font-normal text-gray-800"
+                        aria-label={`Acknowledgement reason for ${f.title}`}
+                        className="mt-1 w-full rounded-lg border border-gray-300 p-2 text-sm font-normal text-gray-800"
                       />
-                    </label>
+                    </label>}
 
                     {f.affectedRowsSample && f.affectedRowsSample.length > 0 && (
                       <div className="mt-2">
@@ -429,8 +428,8 @@ export function DataQualityGatePanel({
 
       {/* 3. ADVISORY SECTION */}
       {advisoryFindings.length === 0 ? (
-        <div className="flex items-center justify-between p-4 bg-gray-50 text-gray-500 border border-gray-200 rounded-lg">
-          <span className="font-bold text-sm">Advisory Notes: None</span>
+        <div className="flex items-center justify-between p-4 bg-gray-100 text-gray-700 border border-gray-200 rounded-lg">
+          <span className="font-bold text-sm">Advisory Notes: None</span><span className="rounded-full bg-green-50 px-2 py-0.5 text-xs font-semibold text-green-700">Clear</span>
         </div>
       ) : (
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
@@ -457,14 +456,14 @@ export function DataQualityGatePanel({
                     {advisoryFindings
                       .filter(f => f.category === "quality")
                       .map((f) => (
-                        <div key={f.checkId} className="pt-3 first:pt-0 space-y-1">
+                        <div key={f.checkId} className={`pt-3 first:pt-0 space-y-1 ${dismissedIds.has(f.checkId) ? "opacity-75" : ""}`}>
                           <div className="flex items-start justify-between">
                             <span className="text-sm font-medium text-gray-900">{f.title}</span>
-                            <button
+                            <button disabled={dismissedIds.has(f.checkId)}
                               onClick={() => onDismiss(f.checkId)}
-                              className="text-xs text-gray-400 hover:text-gray-600"
+                              className="text-xs text-gray-600 disabled:cursor-not-allowed"
                             >
-                              Dismiss
+                              {dismissedIds.has(f.checkId) ? "Dismissed" : "Dismiss"}
                             </button>
                           </div>
                           <p className="text-sm text-gray-600">{renderDetailText(f)}</p>
@@ -490,14 +489,14 @@ export function DataQualityGatePanel({
                     {advisoryFindings
                       .filter(f => f.category === "beautify")
                       .map((f) => (
-                        <div key={f.checkId} className="pt-3 first:pt-0 space-y-1">
+                        <div key={f.checkId} className={`pt-3 first:pt-0 space-y-1 ${dismissedIds.has(f.checkId) ? "opacity-75" : ""}`}>
                           <div className="flex items-start justify-between">
                             <span className="text-sm font-medium text-gray-900">{f.title}</span>
-                            <button
+                            <button disabled={dismissedIds.has(f.checkId)}
                               onClick={() => onDismiss(f.checkId)}
-                              className="text-xs text-gray-400 hover:text-gray-600"
+                              className="text-xs text-gray-600 disabled:cursor-not-allowed"
                             >
-                              Dismiss
+                              {dismissedIds.has(f.checkId) ? "Dismissed" : "Dismiss"}
                             </button>
                           </div>
                           <p className="text-sm text-gray-600">{renderDetailText(f)}</p>

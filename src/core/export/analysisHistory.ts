@@ -21,6 +21,7 @@ import { getModelingRationales } from '../modeling/rationale';
 import type { ModelingResults } from '../modeling/types';
 import { isFisherLike } from '../format/testName';
 import { categoricalDisplayLevels, reorderLevelsTailLast } from '../format/levelOrdering';
+import { buildContinuousLabel, formatPValue, getContinuousSummaryString } from '../format/formatTable';
 
 export interface SourceMetadata {
   filename: string;
@@ -31,6 +32,21 @@ export interface SourceMetadata {
 
 function pyStr(s: string): string {
   return `"${s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+}
+
+/** Serialize JSON-compatible values using Python's literal spellings. */
+function pyLiteral(value: unknown): string {
+  if (value === null || value === undefined) return 'None';
+  if (typeof value === 'boolean') return value ? 'True' : 'False';
+  if (typeof value === 'number') return Number.isFinite(value) ? String(value) : 'None';
+  if (typeof value === 'string') return pyStr(value);
+  if (Array.isArray(value)) return `[${value.map(pyLiteral).join(', ')}]`;
+  if (typeof value === 'object') {
+    return `{${Object.entries(value as Record<string, unknown>)
+      .map(([key, item]) => `${pyStr(key)}: ${pyLiteral(item)}`)
+      .join(', ')}}`;
+  }
+  return 'None';
 }
 
 function resolveLabel(schemaCol: SchemaColumn | undefined, code: string | number): string {
@@ -56,20 +72,38 @@ function variableBlock(
   const isContinuous = v.overallSummary['mean'] !== undefined || v.overallSummary['median'] !== undefined;
   const isCategorical = v.overallSummary['counts'] !== undefined;
 
+  const headerLabel = isContinuous
+    ? buildContinuousLabel(
+        colLabel,
+        getContinuousSummaryString(v.test.name, journalConfig.summary_statistics),
+        schemaCol?.units,
+        journalConfig.summary_statistics.continuous_label_template,
+      )
+    : colLabel;
+
   const lines: string[] = [];
-  lines.push(`# === ${colLabel} ===`);
+  lines.push(`# === ${headerLabel} ===`);
 
   const override = plan.testOverrides?.find((o) => o.variable === v.variable);
   if (override) {
     lines.push(`# User selected ${v.test.name} for this variable (auto-selected: ${v.test.auxiliary?.autoMethod}).`);
     const hasContradiction = v.test.auxiliary?.assumptionCheckContradicted === "true";
     if (hasContradiction) {
-      const shapiroP = v.test.auxiliary?.shapiroPValue;
-      const shapiroPNum = typeof shapiroP === "number" ? shapiroP : typeof shapiroP === "string" ? parseFloat(shapiroP) : undefined;
-      const pValStr = shapiroPNum !== undefined ? (shapiroPNum < 0.001 ? "< 0.001" : shapiroPNum.toFixed(2)) : "";
-      const warningText = isContinuous
-        ? `Shapiro–Wilk p = ${pValStr} indicates the data are not normally distributed; a t-test assumes normality, so its P-value may be unreliable. Mann–Whitney U is recommended.`
-        : `Some expected cell counts are < 5; the chi-square approximation is unreliable, so Fisher's exact test is recommended.`;
+      const reason = v.test.auxiliary?.contradictionReason;
+      let warningText: string;
+      if (reason === "unequal_variance") {
+        const leveneP = v.test.auxiliary?.levenePValue;
+        const levenePNum = typeof leveneP === "number" ? leveneP : typeof leveneP === "string" ? parseFloat(leveneP) : undefined;
+        const p = levenePNum !== undefined ? (levenePNum < 0.001 ? "< 0.001" : levenePNum.toFixed(2)) : "";
+        warningText = `Levene/Brown-Forsythe p = ${p} indicates unequal group variances; one-way ANOVA assumes equal variances, so its P-value may be unreliable. Welch's ANOVA is the indicated alternative but is not available in this release.`;
+      } else if (reason === "low_expected_count" || (!reason && isCategorical)) {
+        warningText = `Some expected cell counts are < 5; the chi-square approximation is unreliable, so Fisher's exact test is recommended.`;
+      } else {
+        const shapiroP = v.test.auxiliary?.shapiroPValue;
+        const shapiroPNum = typeof shapiroP === "number" ? shapiroP : typeof shapiroP === "string" ? parseFloat(shapiroP) : undefined;
+        const pValStr = shapiroPNum !== undefined ? (shapiroPNum < 0.001 ? "< 0.001" : shapiroPNum.toFixed(2)) : "";
+        warningText = `Shapiro–Wilk p = ${pValStr} indicates the data are not normally distributed; a t-test assumes normality, so its P-value may be unreliable. Mann–Whitney U is recommended.`;
+      }
       lines.push(`# ${warningText}`);
     }
   }
@@ -145,39 +179,39 @@ function variableBlock(
     if (groups.length === 2) {
       const g0Safe = groups[0].replace(/[^a-zA-Z0-9_]/g, '_');
       const g1Safe = groups[1].replace(/[^a-zA-Z0-9_]/g, '_');
-      const docxP = v.test.pValue?.toFixed(4) ?? 'NA';
+      const docxP = formatPValue(v.test.pValue, journalConfig.p_value_formatting);
       if (v.test.name === 'Mann-Whitney U') {
         lines.push(`u_${safeName}, p_${safeName} = stats.mannwhitneyu(${safeName}_${g0Safe}, ${safeName}_${g1Safe}, alternative="two-sided")`);
         if (v.test.pValue !== null) {
-          lines.push(`print(f"[${colLabel}] Mann-Whitney U: stat={u_${safeName}:.4f}, p={p_${safeName}:.4f}")  # docx p=${docxP}`);
+          lines.push(`print(f"[${colLabel}] Mann-Whitney U: stat={u_${safeName}:.4f}, p={_eto_format_p_value(p_${safeName})}")  # EasyTableOne p=${docxP}`);
         }
       } else if (v.test.name === "Welch's t-test" || v.test.name === 'Student t-test') {
         lines.push(`t_${safeName}, p_${safeName} = stats.ttest_ind(${safeName}_${g0Safe}, ${safeName}_${g1Safe}, equal_var=False)`);
         if (v.test.pValue !== null) {
-          lines.push(`print(f"[${colLabel}] ${v.test.name}: stat={t_${safeName}:.4f}, p={p_${safeName}:.4f}")  # docx p=${docxP}`);
+          lines.push(`print(f"[${colLabel}] ${v.test.name}: stat={t_${safeName}:.4f}, p={_eto_format_p_value(p_${safeName})}")  # EasyTableOne p=${docxP}`);
         }
       } else {
         lines.push(`# Test: ${v.test.name}`);
         if (v.test.pValue !== null) {
-          lines.push(`print(f"[${colLabel}] ${v.test.name}: p={p_${safeName}:.4f}")  # docx p=${docxP}`);
+          lines.push(`print(f"[${colLabel}] ${v.test.name}: p={_eto_format_p_value(p_${safeName})}")  # EasyTableOne p=${docxP}`);
         }
       }
     } else if (groups.length > 2) {
-      const docxP = v.test.pValue?.toFixed(4) ?? 'NA';
+      const docxP = formatPValue(v.test.pValue, journalConfig.p_value_formatting);
       if (v.test.name === 'ANOVA') {
         lines.push(`f_${safeName}, p_${safeName} = stats.f_oneway(${gSafes})`);
         if (v.test.pValue !== null) {
-          lines.push(`print(f"[${colLabel}] ANOVA: stat={f_${safeName}:.4f}, p={p_${safeName}:.4f}")  # docx p=${docxP}`);
+          lines.push(`print(f"[${colLabel}] ANOVA: stat={f_${safeName}:.4f}, p={_eto_format_p_value(p_${safeName})}")  # EasyTableOne p=${docxP}`);
         }
       } else if (v.test.name === 'Kruskal-Wallis') {
         lines.push(`h_${safeName}, p_${safeName} = stats.kruskal(${gSafes})`);
         if (v.test.pValue !== null) {
-          lines.push(`print(f"[${colLabel}] Kruskal-Wallis: stat={h_${safeName}:.4f}, p={p_${safeName}:.4f}")  # docx p=${docxP}`);
+          lines.push(`print(f"[${colLabel}] Kruskal-Wallis: stat={h_${safeName}:.4f}, p={_eto_format_p_value(p_${safeName})}")  # EasyTableOne p=${docxP}`);
         }
       } else {
         lines.push(`# Test: ${v.test.name}`);
         if (v.test.pValue !== null) {
-          lines.push(`print(f"[${colLabel}] ${v.test.name}: p={p_${safeName}:.4f}")  # docx p=${docxP}`);
+          lines.push(`print(f"[${colLabel}] ${v.test.name}: p={_eto_format_p_value(p_${safeName})}")  # EasyTableOne p=${docxP}`);
         }
       }
     }
@@ -192,10 +226,14 @@ function variableBlock(
       for (const pair of v.postHoc.pairs.filter((p) => p.significant)) {
         lines.push(`# Significant post-hoc pair: ${pair.groupA} vs ${pair.groupB}, corrected p=${pair.pValueCorrected?.toFixed(4) ?? 'NA'}`);
       }
+      if (v.postHoc.caveat) {
+        lines.push(`# ${v.postHoc.caveat}`);
+      }
     }
 
   } else if (isCategorical) {
     lines.push(`# Type: categorical  |  Test: ${v.test.name}`);
+    lines.push(`# Summary reported as: ${journalConfig.summary_statistics.categorical}`);
     lines.push(`ct_${safeName} = pd.crosstab(df[${varKey}], df[${groupKey}])`);
     const counts = v.overallSummary.counts as Record<string, number> | undefined;
     if (counts) {
@@ -228,7 +266,7 @@ function variableBlock(
     }
 
     if (v.test.pValue !== null) {
-      lines.push(`print(f"[${colLabel}] ${v.test.name}: p={p_${safeName}:.4f}")  # docx p=${v.test.pValue?.toFixed(4) ?? 'NA'}`);
+      lines.push(`print(f"[${colLabel}] ${v.test.name}: p={_eto_format_p_value(p_${safeName})}")  # EasyTableOne p=${formatPValue(v.test.pValue, journalConfig.p_value_formatting)}`);
     }
     lines.push(`print(ct_${safeName})`);
     if (v.postHoc) {
@@ -355,7 +393,9 @@ function modelingBlock(modelingResults: ModelingResults | null | undefined): str
 
 /**
  * Generate the full `analysis_history.py` content string.
- * Pure function — no I/O, no Python execution.
+ * Produces a reproducible Python analysis script from the plan, results, schema, source metadata, and optional findings.
+ * It is a pure formatter with no I/O or Python execution; source paths use a placeholder when unavailable, and the
+ * selected journal rules and user overrides are written into the history text.
  */
 export function generateAnalysisHistory(
   plan: AnalysisPlan,
@@ -368,6 +408,7 @@ export function generateAnalysisHistory(
   modelingResults?: ModelingResults | null,
 ): string {
   const libVersions = results.computeMetadata.libVersions;
+  const journalConfig = getEffectiveJournalSettings(journalId, plan.userOverrides);
   const usesDunn = results.perVariable.some((v) => v.postHoc?.method === "dunn");
   const libLine = Object.entries(libVersions)
     .map(([k, v]) => `${k} ${v}`)
@@ -464,6 +505,8 @@ export function generateAnalysisHistory(
         } else {
           text = `- Ordinal suggestion for *${displayVar}*; dismissed`;
         }
+      } else if (r.finding.checkId.startsWith("smallCategoryLevel_")) {
+        text = `- ${r.finding.detail}`;
       } else if (r.finding.checkId.startsWith("highMissingness")) {
         const match = r.finding.detail.match(/had\s+([\d.]+%)\s+missingness/);
         const pctStr = match ? match[1] : "some";
@@ -524,9 +567,55 @@ import pandas as pd
 import numpy as np
 import scipy
 import scipy.stats as stats
+import math
+from decimal import Decimal, ROUND_HALF_UP, localcontext
 from statsmodels.stats.multicomp import pairwise_tukeyhsd
 from statsmodels.stats.multitest import multipletests
 ${usesDunn ? '# Requires: pip install scikit-posthocs\nimport scikit_posthocs\n' : ''}
+
+_ETO_P_FORMAT = ${pyLiteral(journalConfig.p_value_formatting)}
+def _eto_format_p_value(p):
+    if p is None or math.isnan(float(p)):
+        return "-"
+    p = float(p)
+    separator = _ETO_P_FORMAT.get("decimal_separator", ".")
+    def number(value):
+        return float(value.strip().replace("·", ".").replace(",", ".").replace(separator, "."))
+    threshold = _ETO_P_FORMAT["threshold_low"]
+    if threshold.startswith("<") and p < number(threshold[1:]):
+        return threshold
+    decimals = _ETO_P_FORMAT["max_decimal_places"]
+    explicit = None
+    for rule in _ETO_P_FORMAT.get("conditional_decimals", []):
+        interval = rule["range"].strip()
+        matched = False
+        if interval.startswith(">=") or interval.startswith(">"):
+            inclusive = interval.startswith(">=")
+            bound = number(interval[2:] if inclusive else interval[1:])
+            matched = p >= bound if inclusive else p > bound
+        elif "to" in interval:
+            low, high = [number(part) for part in interval.split("to", 1)]
+            matched = low <= p <= high
+        if matched:
+            explicit = rule.get("display")
+            decimals = rule.get("decimals", decimals)
+            break
+    if explicit is not None:
+        return explicit
+    significant = _ETO_P_FORMAT.get("significant_figures")
+    if significant is not None:
+        value = Decimal(str(p))
+        exponent = value.copy_abs().adjusted()
+        with localcontext() as context:
+            context.prec = max(32, significant + abs(exponent) + 8)
+            rounded = value.quantize(Decimal(1).scaleb(exponent - significant + 1), rounding=ROUND_HALF_UP)
+        exponent = rounded.copy_abs().adjusted()
+        places = max(0, significant - exponent - 1)
+        return format(rounded, f".{places}f").replace(".", separator)
+    rendered = f"{p:.{decimals}f}"
+    if not _ETO_P_FORMAT["leading_zero"] and rendered.startswith("0"):
+        rendered = rendered[1:]
+    return rendered.replace(".", separator)
 
 `);
 
@@ -584,8 +673,6 @@ ${usesDunn ? '# Requires: pip install scikit-posthocs\nimport scikit_posthocs\n'
     }
     lines.push('');
   }
-
-  const journalConfig = getEffectiveJournalSettings(journalId, plan.userOverrides);
 
   lines.push('# === Per-variable analyses ===');
   lines.push('# Statistical seed (for deterministic Monte Carlo paths, e.g. r×c Fisher):');

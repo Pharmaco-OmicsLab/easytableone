@@ -7,6 +7,12 @@ function escapeCsvCell(text: string): string {
   return text;
 }
 
+
+
+/**
+ * Converts the supplied formatted table, including its display labels and footnotes, to CSV text.
+ * Values are escaped for CSV output; statistical calculations and journal formatting remain upstream.
+ */
 export function exportCsv(table: FormattedTable): string {
   let out = "";
   const headerRefs = table.headerFootnoteRefs ?? {};

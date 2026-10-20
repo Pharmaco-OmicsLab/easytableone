@@ -16,13 +16,14 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { APP_VERSION } from "../../src/core/appVersion";
 import { PYODIDE_VERSION, PYTHON_RUNTIME_VERSION } from "../../src/core/runtimeEnvironment";
 import { pyodideClient } from "../../src/workers/pyodide.client";
+import { deterministicSample } from "../../scripts/bench/deterministic-sample.mjs";
 
 const TOLERANCE = 1e-4;
 const CONTINUOUS_TWO_GROUP_P_TOLERANCE = 1e-3;
-const VALIDATION_DIR = path.resolve(process.cwd(), "_materials/validation");
+const VALIDATION_DIR = path.resolve(process.cwd(), "validation/tableone");
 const CSV_PATH = path.join(VALIDATION_DIR, "tableone_comparison.csv");
 const SUMMARY_PATH = path.join(VALIDATION_DIR, "tableone_comparison_summary.json");
-const REPORT_DIR = path.resolve(process.cwd(), "_materials/validation_report");
+const REPORT_DIR = path.resolve(process.cwd(), "validation/report");
 const REPORT_PATH = path.join(REPORT_DIR, "EasyTableOne_tableone_validation.docx");
 const TABLEONE_WHEEL = "tableone-0.9.6-py3-none-any.whl";
 const WRITE_VALIDATION_REPORT = process.env.ETO_WRITE_VALIDATION_REPORT === "1";
@@ -823,20 +824,6 @@ function parseCsv(filePath: string): any[] {
   return parsed.data;
 }
 
-function deterministicSample<T>(rows: T[], n: number, seed: number): T[] {
-  const indexed = rows.map((row, index) => ({ row, key: seededRandom(seed + index * 1013904223) }));
-  indexed.sort((a, b) => a.key - b.key);
-  return indexed.slice(0, n).map((item) => item.row);
-}
-
-function seededRandom(seed: number): number {
-  let value = seed >>> 0;
-  value = (value + 0x6d2b79f5) | 0;
-  let next = Math.imul(value ^ (value >>> 15), 1 | value);
-  next ^= next + Math.imul(next ^ (next >>> 7), 61 | next);
-  return ((next ^ (next >>> 14)) >>> 0) / 4294967296;
-}
-
 beforeAll(async () => {
   await pyodideClient.isReady();
   tableoneWheelPath = await pyodideClient.loadLocalExtraWheel(TABLEONE_WHEEL);
@@ -874,6 +861,9 @@ afterAll(async () => {
       .localeCompare([b.dataset, b.variable, b.groupLevel ?? "", b.statistic].join("\u0000")),
   );
   const summary = buildSummary();
+  process.stdout.write(
+    `[golden] compared=${summary.totals.nStatistics} agreeing=${summary.totals.nAgree} notComparable=${summary.totals.nNotComparable} maxAbsDiff=${summary.totals.maxAbsoluteDifference ?? "null"}\n`,
+  );
   if (WRITE_VALIDATION_REPORT) {
     await writeArtifacts(summary);
     await new Promise((resolve) => setTimeout(resolve, 0));

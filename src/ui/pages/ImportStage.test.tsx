@@ -1,5 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import * as XLSX from "xlsx";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { useStore } from "../../store";
 import type { DataFrame } from "../../core/types";
@@ -63,8 +65,8 @@ describe("ImportStage", () => {
     render(<ImportStage />);
 
     expect(screen.getAllByTestId("import-active-panel")).toHaveLength(1);
-    expect(screen.getByText("Drag and drop a CSV or XLSX file here")).toBeDefined();
-    expect(screen.getByLabelText("Active")).toBeDefined();
+    expect(screen.getByText("Drop your spreadsheet here")).toBeDefined();
+    expect(screen.getByTestId("import-section-file").getAttribute("data-state")).toBe("active");
     expect(screen.queryByText("Study Population")).toBeNull();
     expect(screen.queryByText("Measurement Units")).toBeNull();
     expect(screen.queryByText("Confirm Header Row")).toBeNull();
@@ -81,15 +83,29 @@ describe("ImportStage", () => {
     render(<ImportStage />);
 
     expect(screen.getAllByTestId("import-active-panel")).toHaveLength(1);
-    expect(screen.getByText(/cohort\.csv - 3 rows x 2 columns/)).toBeDefined();
+    expect(screen.getByText(/cohort\.csv · 3 rows × 2 columns/)).toBeDefined();
     expect(screen.getByText("Study settings")).toBeDefined();
     expect(screen.getByLabelText(/Adult/)).toBeDefined();
     expect(screen.getByLabelText(/Metric/)).toBeDefined();
     expect((screen.getByRole("radio", { name: /Not specified/ }) as HTMLInputElement).checked).toBe(true);
-    expect(screen.getByRole("button", { name: "Continue to sheet & header" })).toBeDefined();
-    expect(screen.getByText("Confirm the header before dictionary import")).toBeDefined();
+    expect(screen.getByRole("button", { name: "Continue" })).toBeDefined();
+    expect(screen.getByText("Optional · add labels and units")).toBeDefined();
     expect(screen.queryByText("Confirm file ->")).toBeNull();
   });
+
+  it("shows SMD suggested for a randomized trial when population is other", () => {
+    useStore.setState({
+      stage: 1,
+      file: new File(["arm,age\nA,34\n"], "cohort.csv", { type: "text/csv" }),
+      data: dataFrame(),
+      researchPopulation: "other",
+      studyDesign: "randomized_trial",
+    } as any);
+    render(<ImportStage />);
+    expect(screen.getByText("Off").previousElementSibling?.textContent).toBe("Plausibility");
+    expect(screen.getByText("SMD suggested")).toBeTruthy();
+  });
+
 
   it("shows Study settings as the active step after a parsed XLSX file", () => {
     useStore.setState({
@@ -106,8 +122,8 @@ describe("ImportStage", () => {
     render(<ImportStage />);
 
     expect(screen.getAllByTestId("import-active-panel")).toHaveLength(1);
-    expect(screen.getByText(/patients\.xlsx - 2 rows x 2 columns/)).toBeDefined();
-    expect(screen.getByRole("button", { name: "Continue to sheet & header" })).toBeDefined();
+    expect(screen.getByText(/patients\.xlsx · 2 rows × 2 columns/)).toBeDefined();
+    expect(screen.getByRole("button", { name: "Continue" })).toBeDefined();
     expect(screen.getByLabelText(/Adult/)).toBeDefined();
   });
 
@@ -119,12 +135,12 @@ describe("ImportStage", () => {
     } as any);
 
     render(<ImportStage />);
-    fireEvent.click(screen.getByRole("button", { name: "Continue to sheet & header" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
 
     expect(useStore.getState().stage).toBe(2);
-    expect(screen.getByText("Adult population - Metric units")).toBeDefined();
-    expect(screen.getByText("Sheet & header row")).toBeDefined();
-    expect(screen.getByRole("button", { name: "Confirm header row" })).toBeDefined();
+    expect(screen.getByText(/Adult · Metric units · Design not specified/)).toBeDefined();
+    expect(screen.getByRole("heading", { level: 2, name: "Header row" })).toBeDefined();
+    expect(screen.getByRole("button", { name: "Looks right" })).toBeDefined();
   });
 
   it("keeps the dictionary section active and skippable after one-click CSV header confirm", () => {
@@ -136,10 +152,10 @@ describe("ImportStage", () => {
 
     render(<ImportStage />);
     expect(screen.queryByText("1. Select Data Sheet")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Confirm header row" }));
+    fireEvent.click(screen.getByRole("button", { name: "Looks right" }));
 
     expect(useStore.getState().stage).toBe(3);
-    expect(screen.getByText("Upload separate dictionary file")).toBeDefined();
+    expect(screen.getByText("Upload a separate dictionary file (optional)")).toBeDefined();
     expect(screen.queryByTestId("dictionary-detect-modal")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Skip - continue to variable types" }));
@@ -156,14 +172,14 @@ describe("ImportStage", () => {
     render(<ImportStage />);
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
     expect(screen.getAllByTestId("import-active-panel")).toHaveLength(1);
-    expect(screen.getByLabelText("Active")).toBeDefined();
-    fireEvent.click(screen.getByLabelText(/Pediatric/));
-    fireEvent.click(screen.getByLabelText(/Imperial/));
+    expect(screen.getByTestId("import-section-study").getAttribute("data-state")).toBe("active");
+    fireEvent.click(screen.getByRole("radio", { name: /Pediatric/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /Imperial/ }));
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
 
     expect(useStore.getState().researchPopulation).toBe("pediatric");
     expect(useStore.getState().unitSystem).toBe("imperial");
-    expect(screen.getByText("Pediatric population - Imperial units")).toBeDefined();
+    expect(screen.getByText(/Pediatric · Imperial units/)).toBeDefined();
   });
 
   it("renders Study Design options and records a randomized trial selection", () => {
@@ -179,9 +195,19 @@ describe("ImportStage", () => {
     expect(group.querySelectorAll('input[type="radio"]')).toHaveLength(4);
     expect((screen.getByRole("radio", { name: /Not specified/ }) as HTMLInputElement).checked).toBe(true);
 
-    fireEvent.click(screen.getByRole("radio", { name: /Randomised trial/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /Randomized trial/ }));
 
     expect(useStore.getState().studyDesign).toBe("randomized_trial");
+  });
+
+  it("supports arrow-key selection within a native choice group", async () => {
+    useStore.setState({ stage: 1, file: new File(["arm,age\nA,34\n"], "cohort.csv"), data: dataFrame() } as any);
+    render(<ImportStage />);
+    const adult = screen.getByRole("radio", { name: /Adult/ });
+    adult.focus();
+    fireEvent.keyDown(adult, { key: "ArrowDown" });
+    expect((screen.getByRole("radio", { name: /Pediatric/ }) as HTMLInputElement).checked).toBe(true);
+    expect(useStore.getState().researchPopulation).toBe("pediatric");
   });
 
   it("keeps the Study settings summary byte-identical when study design is unspecified", () => {
@@ -194,8 +220,7 @@ describe("ImportStage", () => {
 
     render(<ImportStage />);
 
-    expect(screen.getByText("Adult population - Metric units")).toBeDefined();
-    expect(screen.queryByText(/Not specified/)).toBeNull();
+    expect(screen.getByText(/Adult · Metric units · Design not specified/)).toBeDefined();
   });
 
   it("keeps large-N notices visible after File collapses", () => {
@@ -211,9 +236,9 @@ describe("ImportStage", () => {
     render(<ImportStage />);
 
     expect(screen.getByText(/^This file has 50,001 rows/)).toBeDefined();
-    expect(screen.getByText(/optional Modeling step/)).toBeDefined();
-    expect(screen.getByText(/large\.csv - 50,001 rows x 2 columns/)).toBeDefined();
-    expect(screen.getByRole("button", { name: "Continue to sheet & header" })).toBeDefined();
+    expect(screen.queryByText(/optional Modeling step/)).toBeNull();
+    expect(screen.getByText(/large\.csv · 50,001 rows × 2 columns/)).toBeDefined();
+    expect(screen.getByRole("button", { name: "Continue" })).toBeDefined();
   });
 
   it("Replace returns to stage 1 and clears the file", () => {
@@ -258,9 +283,47 @@ describe("ImportStage", () => {
     render(<ImportStage />);
 
     await waitFor(() => expect(screen.getByTestId("dictionary-detect-banner")).toBeDefined());
-    expect(screen.getByText("Dictionary sheet detected")).toBeDefined();
+    expect(screen.getByText(/We found a dictionary on the “Dictionary” sheet/)).toBeDefined();
     expect(screen.queryByText("Upload separate dictionary file")).toBeNull();
     expect(screen.getAllByRole("button", { name: /Skip/ })).toHaveLength(1);
     expect(screen.getAllByTestId("import-active-panel")).toHaveLength(1);
+  });
+
+  it("progresses section state from File through Study, Header, and Dictionary", async () => {
+    useStore.setState({ stage: 1, file: new File(["arm,age\nA,34\n"], "cohort.csv"), data: dataFrame(), sheets: [] } as any);
+    render(<ImportStage />);
+    const states = () => ["file", "study", "header", "dictionary"].map((key) => screen.getByTestId(`import-section-${key}`).getAttribute("data-state"));
+    expect(states()).toEqual(["done", "active", "pending", "pending"]);
+    fireEvent.click(screen.getByTestId("study-settings-continue"));
+    expect(states()).toEqual(["done", "done", "active", "pending"]);
+    useStore.setState({ stage: 3 } as any);
+    await waitFor(() => expect(states()).toEqual(["done", "done", "done", "active"]));
+  });
+
+  it("binds the study aside to randomized and non-human settings", () => {
+    useStore.setState({ stage: 1, file: new File(["x"], "cohort.csv"), data: dataFrame(), researchPopulation: "adult", studyDesign: "unspecified" } as any);
+    render(<ImportStage />);
+    fireEvent.click(screen.getByRole("radio", { name: /Randomized trial/ }));
+    expect(screen.getByText("SMD suggested")).toBeDefined();
+    fireEvent.click(screen.getByRole("radio", { name: /Other \/ non-human/ }));
+    expect(screen.getAllByText("Off")).toHaveLength(1);
+    expect(screen.getByText("SMD suggested")).toBeDefined();
+  });
+
+  it("uses the real sample workbook dimensions in the sample card", () => {
+    const workbook = XLSX.read(readFileSync(path.resolve(process.cwd(), "public/samples/easytableone_sample.xlsx")), { type: "buffer" });
+    const dataSheet = XLSX.utils.sheet_to_json(workbook.Sheets.Data, { header: 1 }) as unknown[][];
+    expect(dataSheet.length - 1).toBe(25);
+    expect((dataSheet[0] as unknown[]).length).toBe(8);
+    expect(workbook.Sheets.Dictionary).toBeDefined();
+    render(<ImportStage />);
+    expect(screen.getByText("Sample workbook — 25 participants · 8 variables · includes a dictionary sheet")).toBeDefined();
+  });
+
+  it("moves focus to the Header heading after Study continues", async () => {
+    useStore.setState({ stage: 1, file: new File(["arm,age\nA,34\n"], "cohort.csv"), data: dataFrame(), sheets: [] } as any);
+    render(<ImportStage />);
+    fireEvent.click(screen.getByTestId("study-settings-continue"));
+    await waitFor(() => expect(document.activeElement?.textContent).toContain("Header row"));
   });
 });

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { PYODIDE_VERSION, PYTHON_RUNTIME_VERSION } from '../src/core/runtimeEnvironment';
 
 /**
  * Verifies that the numpy wheel file on disk matches the SHA-256 recorded
@@ -58,6 +59,13 @@ export function resolveWheelSha(contents: Buffer, wheelPath: string): ResolvedSh
 describe('pyodide-lock.json integrity', () => {
   const PYODIDE_DIR = resolve(process.cwd(), 'public/pyodide-314.0.0a1');
   const LOCK_PATH = resolve(PYODIDE_DIR, 'pyodide-lock.json');
+
+  it('keeps source runtime metadata synchronized with the public lock file', () => {
+    const lock = JSON.parse(readFileSync(LOCK_PATH, 'utf8'));
+
+    expect(PYODIDE_VERSION).toBe(lock.info.version);
+    expect(PYTHON_RUNTIME_VERSION).toBe(lock.info.python);
+  });
 
   it('numpy lock entry sha256 matches the on-disk wheel file (LFS-aware)', () => {
     const lock = JSON.parse(readFileSync(LOCK_PATH, 'utf8'));

@@ -1,45 +1,45 @@
 import { test, expect } from "@playwright/test";
 import { stat } from "node:fs/promises";
-import * as path from "node:path";
-import { fileURLToPath } from "node:url";
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+import {
+  chooseGrouping,
+  continueToFormatExport,
+  dismissWelcome,
+  openApp,
+  proceedFromQa,
+  proceedFromSchema,
+  resolveAmbiguousTypes,
+  runStats,
+  skipDictionary,
+  uploadDataset,
+} from "./helpers/workflow";
 
 // This smoke path follows the combined ImportStage: file → study settings →
 // sheet/header → dictionary → schema → QA → plan → statistics → export.
 // ImportStage.tsx is the source of truth when this flow changes.
+// The reusable steps live in ./helpers/workflow.ts (shared with data-locality.spec.ts).
 test("End-to-end smoke test for DOCX export", async ({ page }) => {
   test.setTimeout(180_000);
-  await page.goto("/");
-  await expect(page.getByText("Analysis engine ready", { exact: true })).toBeVisible({ timeout: 60_000 });
-  await page.getByTestId("welcome-get-started").click();
-  await expect(page.getByRole("dialog", { name: /welcome/i })).toBeHidden();
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openApp(page);
+  await dismissWelcome(page);
 
-  await page.locator("#fileInput").setInputFiles(
-    path.join(__dirname, "../../public/samples/heart_failure_clinical_records_dataset.csv"),
-  );
-  await expect(page.getByTestId("import-section-file")).toHaveAttribute("data-state", "done");
+  await uploadDataset(page);
+  await skipDictionary(page);
 
-  await page.getByTestId("study-settings-continue").click();
-  await expect(page.getByTestId("import-section-header")).toHaveAttribute("data-state", "active");
-  await page.getByTestId("header-row-confirm").click();
+  await resolveAmbiguousTypes(page);
+  await proceedFromSchema(page);
 
-  await expect(page.getByTestId("import-section-dictionary")).toHaveAttribute("data-state", "active");
-  await page.getByTestId("dictionary-skip").click();
+  await proceedFromQa(page);
+  await chooseGrouping(page, "DEATH_EVENT");
+  await runStats(page);
+  await continueToFormatExport(page);
 
-  const ambiguousSelects = page.locator('[data-testid="schema-type-select"][data-ambiguous="true"]');
-  while (await ambiguousSelects.count()) {
-    // Resolving a column removes its ambiguous selector, so always re-query the first remaining one.
-    await ambiguousSelects.first().selectOption("categorical_nominal");
-  }
-  await page.getByTestId("schema-proceed").click();
-
-  await page.getByTestId("qa-proceed").click();
-  await page.locator("#grouping-select").selectOption("DEATH_EVENT");
-  await page.getByTestId("plan-run-statistics").click();
-
-  await expect(page.getByTestId("stats-continue-format-export")).toBeVisible({ timeout: 60_000 });
-  await page.getByTestId("stats-continue-format-export").click();
+  await page.getByText("Override individual settings", { exact: false }).click();
+  const overridePanel = page.getByTestId("journal-override-panel");
+  await expect(overridePanel).toBeVisible();
+  await expect.poll(() => overridePanel.evaluate((panel) => panel.getBoundingClientRect().width)).toBeGreaterThan(640);
+  const threshold = page.getByLabel("P-value Threshold");
+  await expect.poll(() => threshold.evaluate((input) => input.scrollWidth <= input.clientWidth)).toBe(true);
 
   const downloadPromise = page.waitForEvent("download");
   await page.locator("#download-docx").click();

@@ -104,21 +104,23 @@ describe("TutorialModal unit", () => {
   });
 });
 
-// ─── Global "?" button (trigger surface 2) ───────────────────────────────────
+// ─── Global Help menu (trigger surface 2) ───────────────────────────────────
 
-describe("Global tutorial trigger (MainLayout '?' button)", () => {
+describe("Global tutorial trigger (MainLayout Help menu)", () => {
   beforeEach(() => {
     useStore.setState({ tutorialOpen: false, stage: 1 });
   });
 
-  it("global-tutorial-button is present in MainLayout", () => {
+  it("global-tutorial-button is available from the Help menu", () => {
     render(<MainLayout />);
+    fireEvent.click(screen.getByRole("button", { name: "Help" }));
     const btn = document.getElementById("global-tutorial-button");
     expect(btn).not.toBeNull();
   });
 
-  it("clicking global-tutorial-button opens TutorialModal", async () => {
+  it("choosing Tutorial from Help opens TutorialModal", async () => {
     render(<MainLayout />);
+    fireEvent.click(screen.getByRole("button", { name: "Help" }));
     const btn = document.getElementById("global-tutorial-button")!;
     await act(async () => { fireEvent.click(btn); });
     expect(useStore.getState().tutorialOpen).toBe(true);
@@ -129,6 +131,7 @@ describe("Global tutorial trigger (MainLayout '?' button)", () => {
   it("closing modal does not change the stage", async () => {
     useStore.setState({ stage: 1 });
     render(<MainLayout />);
+    fireEvent.click(screen.getByRole("button", { name: "Help" }));
     const btn = document.getElementById("global-tutorial-button")!;
     await act(async () => { fireEvent.click(btn); });
     await act(async () => { fireEvent.keyDown(window, { key: "Escape" }); });

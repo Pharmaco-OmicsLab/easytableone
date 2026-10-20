@@ -8,6 +8,7 @@ import {
   recordExcelError,
 } from "./csv";
 
+/** Workbook sheet metadata used to present the sheet selector and suggest dictionary sheets. */
 export interface SheetInfo {
   name: string;
   rowCount: number;
@@ -15,6 +16,9 @@ export interface SheetInfo {
   isLikelyDictionary: boolean;
 }
 
+
+
+/** Reads a local workbook and returns both its parsed workbook object and sheet dimensions/dictionary hints. */
 export async function enumerateSheets(
   file: File,
 ): Promise<{ workbook: XLSX.WorkBook; sheets: SheetInfo[] }> {
@@ -33,6 +37,9 @@ export async function enumerateSheets(
   return { workbook, sheets };
 }
 
+
+
+/** Returns the first likely header among the first 20 rows; falls back to row zero when no row meets the heuristic. */
 export function detectHeaderRow(rows: any[][]): number {
   // Heuristic: first row where >50% cells are non-numeric and unique
   for (let i = 0; i < Math.min(rows.length, 20); i++) {
@@ -63,6 +70,12 @@ export function detectHeaderRow(rows: any[][]): number {
   return 0; // Default to first row
 }
 
+
+
+/**
+ * Converts one selected worksheet into a normalized `DataFrame`, starting after the caller-confirmed header row.
+ * Missing sentinels and spreadsheet error cells become `null`; invalid sheet names or header indices throw.
+ */
 export function parseXLSXSheet(
   workbook: XLSX.WorkBook,
   sheetName: string,

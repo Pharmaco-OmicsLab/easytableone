@@ -334,9 +334,20 @@ describe("DataQualityGatePanel", () => {
       />,
     );
 
-    expect(screen.getAllByRole("button", { name: "Acknowledge" })).toHaveLength(1);
+    expect(screen.getAllByRole("checkbox", { name: "I acknowledge this issue" })).toHaveLength(1);
     expect(screen.getAllByRole("button", { name: "Exclude Column" })).toHaveLength(1);
     expect(screen.queryByRole("button", { name: "Keep and document" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Exclude variable" })).toBeNull();
+  });
+
+  it("records acknowledgement from the checkbox and only then reveals the optional reason", () => {
+    const onAcknowledge = vi.fn();
+    const finding = mockFindings.find((item) => item.tier === "review")!;
+    const view = render(<DataQualityGatePanel findings={[finding]} acknowledgedIds={new Set()} dismissedIds={new Set()} onAcknowledge={onAcknowledge} onDismiss={vi.fn()} onReupload={vi.fn()} />);
+    expect(screen.queryByLabelText(`Acknowledgement reason for ${finding.title}`)).toBeNull();
+    fireEvent.click(screen.getByRole("checkbox", { name: "I acknowledge this issue" }));
+    expect(onAcknowledge).toHaveBeenCalledWith(finding.checkId, true);
+    view.rerender(<DataQualityGatePanel findings={[finding]} acknowledgedIds={new Set([finding.checkId])} dismissedIds={new Set()} onAcknowledge={onAcknowledge} onDismiss={vi.fn()} onReupload={vi.fn()} />);
+    expect(screen.getByLabelText(`Acknowledgement reason for ${finding.title}`)).toBeTruthy();
   });
 });

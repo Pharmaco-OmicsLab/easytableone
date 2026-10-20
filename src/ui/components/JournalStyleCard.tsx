@@ -63,6 +63,13 @@ export function JournalStyleCard({ config }: JournalStyleCardProps) {
         <span className="text-blue-600 font-semibold text-base">📋 {config.display_name}</span>
         <span className="text-blue-400 text-xs">Style applied to your table</span>
       </div>
+      <p className="mb-3 text-gray-700">
+        Based on: {config.provenance.source_url ? (
+          <a href={config.provenance.source_url} target="_blank" rel="noopener noreferrer" className="underline">
+            {config.provenance.source_title}
+          </a>
+        ) : config.provenance.source_title}, retrieved {config.provenance.retrieved_on ?? "not applicable"}; last reviewed {config.provenance.last_reviewed_on}
+      </p>
       <ul className="space-y-1">
         {rows.map((r) => (
           <li key={r.label} className="flex flex-wrap gap-1 items-baseline">

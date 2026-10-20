@@ -22,6 +22,41 @@ function planWithMissingRows(): AnalysisPlan {
 }
 
 describe("formatTable missing-data rows", () => {
+  it("shows the available-case denominator only for categorical group cells with missing values", () => {
+    const categoricalStats = {
+      ...mockStats,
+      groups: [{ name: "Group A", n: 25 }, { name: "Group B", n: 24 }],
+      perVariable: [{
+        ...mockStats.perVariable[2],
+        summaryByGroup: {
+          "Group A": { counts: { Female: 24, Male: 0 }, percentages: { Female: 100, Male: 0 }, n: 24 },
+          "Group B": { counts: { Female: 24, Male: 0 }, percentages: { Female: 100, Male: 0 }, n: 24 },
+        },
+      }],
+    };
+
+    const table = formatTable(categoricalStats, "NEJM", dummyPlan, dummySchema, "1.0.0-test");
+    expect(table.rows[0].cells.slice(1, 3)).toEqual(["24/24 (100%)", "24 (100%)"]);
+    expect(table.rows[0].cells.at(-1)).toBe("0.03");
+  });
+
+  it("does not change continuous summaries when the available-case n differs from group N", () => {
+    const continuousStats = {
+      ...mockStats,
+      groups: [{ name: "Group A", n: 25 }, { name: "Group B", n: 24 }],
+      perVariable: [{
+        ...mockStats.perVariable[0],
+        summaryByGroup: {
+          "Group A": { mean: 45.234, sd: 5.678, n: 24 },
+          "Group B": { mean: 47.891, sd: 6.123, n: 24 },
+        },
+      }],
+    };
+
+    const table = formatTable(continuousStats, "NEJM", dummyPlan, dummySchema, "1.0.0-test");
+    expect(table.rows[0].cells.slice(1, 3)).toEqual(["45.2 (5.7)", "47.9 (6.1)"]);
+  });
+
   it("keeps output identical when the missing-data row toggle is off", () => {
     const current = formatTable(mockStats, "NEJM", dummyPlan, dummySchema, "1.0.0-test");
     const withQaCounts = formatTable(mockStats, "NEJM", dummyPlan, dummySchema, "1.0.0-test", [], qaReport);
@@ -51,6 +86,28 @@ describe("formatTable missing-data rows", () => {
     // Consistency guard: sum of group missing counts matches overall missingCount in qaReport
     const sum = 8 + 4;
     expect(sum).toBe(qaReport.columns[0].missingCount);
+  });
+
+  it("keeps the missing row separate from available-case categorical denominators", () => {
+    const categoricalStats = {
+      ...mockStats,
+      groups: [{ name: "Group A", n: 25 }, { name: "Group B", n: 24 }],
+      perVariable: [{
+        ...mockStats.perVariable[2],
+        summaryByGroup: {
+          "Group A": { counts: { Female: 24, Male: 0 }, percentages: { Female: 100, Male: 0 }, n: 24 },
+          "Group B": { counts: { Female: 24, Male: 0 }, percentages: { Female: 100, Male: 0 }, n: 24 },
+        },
+      }],
+    };
+    const categoricalQaReport: DataQualityReport = {
+      ...qaReport,
+      columns: [{ name: "Gender", missingCount: 1, missingPercent: 2, cardinality: 2, isConstant: false, flags: [] }],
+    };
+    const table = formatTable(categoricalStats, "NEJM", planWithMissingRows(), dummySchema, "1.0.0-test", [], categoricalQaReport);
+
+    expect(table.rows[0].cells.slice(1, 3)).toEqual(["24/24 (100%)", "24 (100%)"]);
+    expect(table.rows.find((row) => row.cells[0] === "Missing, n (%)")?.cells.slice(1, 3)).toEqual(["1 (4%)", "0 (0%)"]);
   });
 
   it("computes per-group missing even for a group literally named Overall", () => {
@@ -84,7 +141,8 @@ describe("formatTable missing-data rows", () => {
     jama.missing_data_label = "Not recorded";
     try {
       const table = formatTable(mockStats, "JAMA", planWithMissingRows(), dummySchema, "1.0.0-test", [], qaReport);
-      expect(table.rows.some((row) => row.cells[0] === "Not recorded, n (%)")).toBe(true);
+      // D108 makes JAMA's categorical missing-data label use “No. (%)”.
+      expect(table.rows.some((row) => row.cells[0] === "Not recorded, No. (%)")).toBe(true);
     } finally {
       if (original === undefined) {
         delete jama.missing_data_label;

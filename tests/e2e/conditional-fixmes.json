@@ -1,0 +1,5 @@
+{
+  "prod-webkit": {
+    "offline pass: after engine ready the whole workflow and all exports work without a network": "Playwright WebKit offline emulation stalls file import: setInputFiles is followed by `Failed to load resource: WebKit encountered an internal error` at a blob: URL; trace records zero requests, zero request failures, and zero CSP violations. Related Playwright issues: https://github.com/microsoft/playwright/issues/42775 and https://github.com/microsoft/playwright/issues/42795."
+  }
+}

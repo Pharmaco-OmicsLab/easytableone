@@ -198,11 +198,26 @@ _Source of truth for the FAQ modal content. Codex reads this file when implement
 
 ### What is SMD and when should I show it?
 
-**Short:** SMD (standardized mean difference) measures the size of the between-group difference in units of standard deviation, independent of sample size. It's the balance metric favored in randomized-trial reporting (CONSORT). It's on by default; turn it off if your journal wants P-values only, or for observational designs where SMD isn't conventional.
+**Short:** Standardized mean difference: the between-group difference expressed in standard-deviation units. Unlike a P value it does not grow with sample size. An absolute SMD above 0.1 is conventionally read as meaningful imbalance. SMD is off by default. Most clinical Table 1s report P values only; turn SMD on when you need to show how balanced the groups are.
+
+**More detail:**
+
+Use SMD when:
+
+- Observational study comparing treatment or exposure groups (e.g. drug A vs drug B, smokers vs non-smokers), especially if you will adjust, match or weight for confounders. SMD is the standard balance measure here, and propensity-score papers are expected to report it.
+- Randomized trial. Significance tests of baseline differences are discouraged (CONSORT); SMD describes the size of any chance imbalance instead. Consider showing SMD and hiding the P-value column.
+- Large datasets, where trivially small differences can still give P < 0.05.
+
+Usually not needed when:
+
+- Groups defined by an outcome or disease status (e.g. survivors vs non-survivors, cases vs controls) described for a clinical question — P values are the usual convention.
+- Your target journal or reporting guideline does not ask for it.
+
+SMD is not a hypothesis test and has no P value. The 0.1 threshold is a convention, not a rule. For more than two groups the table shows the largest pairwise SMD.
 
 ### Should I include P-values in Table 1?
 
-**Short:** It depends on your study type. For randomized trials, many journals discourage P-values in the baseline table, because a significant baseline difference in a properly randomized trial is by definition due to chance — SMD is preferred. For observational studies, P-values are more commonly reported. The checkbox is on by default; use your judgment.
+**Short:** It depends on your study type. For randomized trials, many journals discourage P-values in the baseline table, because a significant baseline difference in a properly randomized trial is by definition due to chance — SMD is preferred. SMD is off by default; switch it on in the Analysis Plan (or use the randomised-trial advisory, which does both). For observational studies, P-values are more commonly reported. The checkbox is on by default; use your judgment.
 
 ### Which multiple-testing correction should I choose?
 

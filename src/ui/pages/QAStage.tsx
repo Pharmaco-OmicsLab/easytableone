@@ -1,15 +1,17 @@
 import { useState, useEffect } from "react";
-import type { OutlierAction, DataQualityRecord, DataQualityFinding } from "../../core/types";
+import type { DataQualityRecord, DataQualityFinding } from "../../core/types";
 import { useStore } from "../../store";
 import { resolveTreatAsMissing, resolveAddAsLevels } from "../../core/qa/dictionaryComplianceResolvers";
 import { DataQualityGatePanel } from "../components/DataQualityGatePanel";
 import { PolishAdvisorPanel } from "../components/PolishAdvisorPanel";
 import { EDAPanel } from "../components/EDAPanel";
 import { runChecks, type CheckContext, type WorkbookMeta } from "../../core/qa/checkRegistry";
-import AboutThisStep from "../components/AboutThisStep";
 import DecisionExplainer from "../components/DecisionExplainer";
 import GlossaryTerm from "../components/GlossaryTerm";
 import { TABLE1_MISSING_DATA_SIGNPOST } from "../../core/education/educationContent";
+import StepHeader from "../layout/StepHeader";
+import StepActionBar from "../layout/StepActionBar";
+import { useToast } from "../layout/Toast";
 
 export default function QAStage() {
   const {
@@ -26,6 +28,7 @@ export default function QAStage() {
     sheets,
     dataQualityFindings,
     setDataQualityFindings,
+    dataQualityRecords,
     setDataQualityRecords,
     plan,
     draftGroupingVariable,
@@ -46,6 +49,7 @@ export default function QAStage() {
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
   const [detailsExpanded, setDetailsExpanded] = useState(false);
   const [detailsToggled, setDetailsToggled] = useState(false);
+  const toast = useToast();
 
   // Run checks on mount / when schema or data changes
   useEffect(() => {
@@ -101,6 +105,7 @@ export default function QAStage() {
     setData(newData);
     setAuditLog?.(log);
     setComplianceResolutions((prev) => ({ ...prev, [columnName]: 'treat_as_missing' }));
+    toast("Resolution applied and logged in analysis history");
   }
 
   function applyAddAsLevels(columnName: string) {
@@ -117,6 +122,7 @@ export default function QAStage() {
     setSchema(newSchema);
     setAuditLog?.(log);
     setComplianceResolutions((prev) => ({ ...prev, [columnName]: 'levels_added' }));
+    toast("Resolution applied and logged in analysis history");
   }
 
   function handleReupload(columnName: string) {
@@ -142,6 +148,11 @@ export default function QAStage() {
   const reviewFindings = displayFindings.filter((f) => f.tier === "review");
   const hasBlocking = blockingFindings.length > 0;
   const hasUnacknowledgedReview = reviewFindings.some((f) => !acknowledgedIds.has(f.checkId));
+  const gateReason = hasBlocking
+    ? `${blockingFindings.length} blocking issue${blockingFindings.length === 1 ? "" : "s"} must be resolved`
+    : complianceError && !allComplianceResolved
+      ? "1 blocking issue must be resolved"
+      : undefined;
 
   const handleProceed = () => {
     // Commit Stage 5 findings to records
@@ -161,7 +172,13 @@ export default function QAStage() {
         ...(acknowledgeReasons[f.checkId]?.trim() ? { fixDetails: acknowledgeReasons[f.checkId].trim() } : {}),
       };
     });
-    setDataQualityRecords(committed);
+    const preserved = dataQualityRecords.filter((r) => r.response === "applied");
+    const recordMap = new Map<string, DataQualityRecord>();
+    for (const r of [...preserved, ...committed]) {
+      recordMap.delete(r.finding.checkId);
+      recordMap.set(r.finding.checkId, r);
+    }
+    setDataQualityRecords(Array.from(recordMap.values()));
     const reasonEntries = committed
       .filter((record) => record.response === "acknowledged" && record.fixDetails)
       .map((record) => ({
@@ -181,47 +198,37 @@ export default function QAStage() {
   };
 
   return (
-    <div className="max-w-6xl mx-auto space-y-8">
-      <AboutThisStep stage="qa" />
+    <div className="mx-auto max-w-7xl space-y-5">
+      <StepHeader n={3} eyebrow="DATA CHECKS" title="Check data quality" lede="We scan for blocking errors, items to review, and advisories. Nothing is changed unless you choose to act." next="Analysis plan" />
       <div className="grid gap-3 md:grid-cols-2">
         <DecisionExplainer decisionId="qa.gates" label="Why these data-quality gates?" context={{ schema, plan }} />
         <DecisionExplainer decisionId="qa.sanity-bounds" label="Why these sanity-range checks?" context={{ schema, plan }} />
       </div>
-      <p aria-label={TABLE1_MISSING_DATA_SIGNPOST} className="rounded border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+      <p aria-label={TABLE1_MISSING_DATA_SIGNPOST} className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
         Table 1 summarizes the values actually recorded (<GlossaryTerm term="available-case" /> per variable). It does not fill in missing values. If you want a <GlossaryTerm term="complete-case" /> or multiple-<GlossaryTerm term="imputation" /> analysis, choose it in the Modeling step.
       </p>
-      {/* Data Quality Gate Panel */}
+      {researchPopulation === "other" && <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">Plausibility checks are off. You chose “Other / non-human” in Step 1, so human bound checks are not run. Edit study settings in Step 1 to change this.</p>}
+      <div className="grid gap-4 min-[1181px]:grid-cols-[minmax(0,1fr)_300px]">
+      <div className="min-w-0 space-y-4">
       <DataQualityGatePanel
         findings={displayFindings}
         acknowledgedIds={acknowledgedIds}
         acknowledgeReasons={acknowledgeReasons}
         onAcknowledgeReasonChange={(id, reason) => setAcknowledgeReasons(prev => ({ ...prev, [id]: reason }))}
         dismissedIds={dismissedIds}
-        onAcknowledge={(id) => setAcknowledgedIds(prev => new Set([...prev, id]))}
+        onAcknowledge={(id, acknowledged) => setAcknowledgedIds((prev) => { const next = new Set(prev); if (acknowledged) next.add(id); else next.delete(id); return next; })}
         onDismiss={(id) => setDismissedIds(prev => new Set([...prev, id]))}
         onReupload={() => setStage(1)}
+        onGoToVariableTypes={() => setStage(4)}
         onOpenTutorial={() => setTutorialOpen(true)}
       />
 
-      {/* Polish Advisor Panel */}
-      <PolishAdvisorPanel />
-
-      <p className="rounded border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+      <p className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
         Run EDA if you want missingness and correlation checks before finalizing - optional for a descriptive Table 1.
       </p>
 
-      <EDAPanel
-        data={data}
-        schema={schema}
-        plan={plan ?? (draftGroupingVariable ? { groupingVariable: draftGroupingVariable } as any : null)}
-        edaResults={edaResults}
-        setEdaResults={setEdaResults}
-        activeJournal={journalId}
-        userOverrides={plan?.userOverrides}
-      />
-
       {/* Collapsible Details */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+      <div className="rounded-[14px] border border-gray-200 bg-white shadow-sm overflow-hidden">
         <button
           onClick={() => {
             setDetailsToggled(true);
@@ -237,15 +244,14 @@ export default function QAStage() {
           <div className="p-4 border-t border-gray-200 space-y-6">
             {/* D33: Dictionary Compliance Modal */}
             {complianceError && !allComplianceResolved && (
-              <div className="mb-8 border-2 border-amber-400 rounded-xl bg-amber-50 shadow-lg">
-                <div className="flex items-center gap-3 px-6 py-4 bg-amber-400 rounded-t-xl">
+              <div className="mb-5 rounded-[14px] border border-red-200 bg-red-50 shadow-sm">
+                <div className="flex items-center gap-3 rounded-t-[14px] bg-red-100 px-5 py-4">
                   <span className="text-2xl">⚠️</span>
-                  <h3 className="text-lg font-bold text-amber-900">Data Dictionary Compliance Check</h3>
+                  <h3 className="text-base font-bold text-red-900">Dictionary Compliance Violations</h3>
                 </div>
                 <div className="px-6 py-4">
-                  <p className="text-amber-800 mb-4">
-                    Some columns contain values that are not declared in your data dictionary.
-                    This usually indicates a data-entry error. Please resolve each column below before continuing.
+                  <p className="text-sm text-red-800 mb-4">
+                    Some columns contain values that are not declared in the data dictionary. All undeclared values must be resolved before proceeding.
                   </p>
 
                   <div className="space-y-4">
@@ -255,7 +261,7 @@ export default function QAStage() {
                       const labelsForCol = newLabelInputs[v.columnName] ?? {};
 
                       return (
-                        <div key={v.columnName} className={`border rounded-lg p-4 ${isResolved ? 'border-green-300 bg-green-50' : 'border-amber-200 bg-white'}`}>
+                        <div key={v.columnName} className={`border rounded-xl p-4 ${isResolved ? 'border-green-200 bg-green-50' : 'border-gray-200 bg-white'}`}>
                           <div className="flex items-center justify-between mb-2">
                             <h4 className="font-semibold text-gray-800">{v.columnName}</h4>
                             {isResolved && (
@@ -296,7 +302,8 @@ export default function QAStage() {
                                     <span className="text-gray-500 w-32">Label for "{u.value}":</span>
                                     <input
                                       type="text"
-                                      className="border rounded px-2 py-1 text-sm flex-1"
+                                      aria-label={`Display label for ${String(u.value)}`}
+                                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-[13px] flex-1"
                                       placeholder={`Label for value "${u.value}"`}
                                       value={labelsForCol[String(u.value)] ?? ''}
                                       onChange={(e) => setNewLabelInputs((prev) => ({
@@ -311,13 +318,13 @@ export default function QAStage() {
                               <div className="flex flex-wrap gap-2">
                                 <button
                                   onClick={() => applyTreatAsMissing(v.columnName)}
-                                  className="px-3 py-1.5 text-sm bg-yellow-100 border border-yellow-300 text-yellow-800 rounded hover:bg-yellow-200"
+                                  className="rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
                                 >
                                   Treat as missing for this column
                                 </button>
                                 <button
                                   onClick={() => applyAddAsLevels(v.columnName)}
-                                  className="px-3 py-1.5 text-sm bg-blue-100 border border-blue-300 text-blue-800 rounded hover:bg-blue-200"
+                                  className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700"
                                 >
                                   Add as new level(s)
                                 </button>
@@ -344,7 +351,7 @@ export default function QAStage() {
               </div>
             )}
 
-            <div className="bg-white shadow rounded-lg overflow-hidden">
+            <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
@@ -402,21 +409,9 @@ export default function QAStage() {
                                   <span>
                                     Row {rIdx}: <strong className="text-red-500">{v}</strong>
                                   </span>
-                                  <select
-                                    className="ml-2 border rounded p-1 text-xs"
-                                    value={act}
-                                    onChange={(e) =>
-                                      setOutlierAction(col.name, {
-                                        rowIndex: rIdx,
-                                        action: e.target.value as OutlierAction["action"],
-                                        winsorizeBound: "p01_p99",
-                                      })
-                                    }
-                                  >
-                                    <option value="keep">Keep</option>
-                                    <option value="exclude">Exclude</option>
-                                    <option value="winsorize">Winsorize</option>
-                                  </select>
+                                  <div role="group" aria-label={`Outlier handling for ${col.name}, row ${rIdx}`} className="ml-2 flex shrink-0 gap-1">
+                                    {(["keep", "exclude", "winsorize"] as const).map((choice) => <button key={choice} type="button" aria-label={`${choice === "keep" ? "Keep" : choice === "exclude" ? "Exclude" : "Winsorize"} ${col.name} row ${rIdx}`} aria-pressed={act === choice} onClick={() => { if (act === choice) return; setOutlierAction(col.name, { rowIndex: rIdx, action: choice, winsorizeBound: "p01_p99" }); toast("Outlier choice logged in analysis history"); }} className={`rounded-lg border px-2.5 py-[3px] text-xs ${act === choice ? "border-blue-600 bg-blue-50 font-semibold text-blue-600" : "border-gray-300 text-gray-700 hover:bg-gray-50"}`}>{choice === "keep" ? "Keep" : choice === "exclude" ? "Exclude" : "Winsorize"}</button>)}
+                                  </div>
                                 </div>
                               );
                             })}
@@ -448,46 +443,13 @@ export default function QAStage() {
       </div>
 
       {/* BOTTOM ACTION BUTTONS */}
-      <div className="flex items-center justify-between border-t border-gray-100 pt-6">
-        <button
-          onClick={() => setStage(4)}
-          className="px-4 py-2 border border-gray-300 rounded text-gray-700 hover:bg-gray-50 transition-colors"
-        >
-          Go back to Variable types
-        </button>
-
-        {hasBlocking ? (
-          <div className="flex items-center space-x-2">
-            <span className="text-xs text-red-600 font-semibold">
-              Resolve blocking issues to proceed
-            </span>
-            <button
-              disabled
-              className="px-6 py-2 bg-gray-300 text-gray-500 rounded cursor-not-allowed font-medium"
-            >
-              Acknowledge all and proceed
-            </button>
-          </div>
-        ) : hasUnacknowledgedReview ? (
-          <button
-            onClick={() => {
-              const reviewIds = displayFindings.filter(f => f.tier === "review").map(f => f.checkId);
-              setAcknowledgedIds(new Set([...acknowledgedIds, ...reviewIds]));
-            }}
-            className="px-6 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded font-medium transition-colors"
-          >
-            I acknowledge these issues and want to proceed
-          </button>
-        ) : (
-          <button
-            onClick={handleProceed}
-            data-testid="qa-proceed"
-            className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded font-medium transition-colors"
-          >
-            Proceed
-          </button>
-        )}
       </div>
+      <aside className="space-y-4">
+        <PolishAdvisorPanel />
+        <EDAPanel data={data} schema={schema} plan={plan ?? (draftGroupingVariable ? { groupingVariable: draftGroupingVariable } as any : null)} edaResults={edaResults} setEdaResults={setEdaResults} activeJournal={journalId} userOverrides={plan?.userOverrides} />
+      </aside>
+      </div>
+      <StepActionBar onBack={() => setStage(4)} backLabel="Back" status={gateReason ? { tone: "error", text: gateReason } : hasUnacknowledgedReview ? { tone: "warn", text: `${reviewFindings.filter((f) => !acknowledgedIds.has(f.checkId)).length} review item(s) to acknowledge` } : { tone: "ok", text: "All issues resolved or acknowledged" }} primary={gateReason ? { label: "Proceed to Analysis plan", testId: "qa-proceed", onClick: handleProceed, disabledReason: gateReason } : hasUnacknowledgedReview ? { label: "I acknowledge these issues and want to proceed", onClick: () => { const reviewIds = reviewFindings.map((f) => f.checkId); setAcknowledgedIds(new Set([...acknowledgedIds, ...reviewIds])); } } : { label: "Proceed to Analysis plan", testId: "qa-proceed", onClick: handleProceed }} />
     </div>
   );
 }

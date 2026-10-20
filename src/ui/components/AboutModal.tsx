@@ -1,6 +1,8 @@
 import { useCallback, useRef } from "react";
 import { DIFFERENTIATORS, FEEDBACK_EMAIL, LAB_DESCRIPTION, LAB_GITHUB, LAB_NAME, LAB_TAGLINE, LAB_WEBSITE, PRIVACY_POLICY_TEXT, TEAM, TERMS_OF_SERVICE_TEXT } from "../../core/about/aboutContent";
 import { useStore } from "../../store";
+import { APP_VERSION } from "../../core/appVersion";
+import { journalRulesets } from "../../core/format/formatTable";
 import { useFocusTrap } from "../hooks/useFocusTrap";
 
 function paragraphs(text: string) {
@@ -30,12 +32,12 @@ export default function AboutModal() {
         if (e.target === e.currentTarget) close();
       }}
     >
-      <div ref={modalRef} tabIndex={-1} className="relative mx-4 w-full max-w-3xl rounded-xl bg-white p-8 shadow-xl">
+      <div ref={modalRef} tabIndex={-1} className="relative mx-4 max-h-[80vh] w-full max-w-3xl overflow-auto rounded-2xl bg-white p-8 shadow-xl">
         <button
           id="about-close-button"
           type="button"
           onClick={close}
-          className="absolute right-4 top-4 text-gray-400 transition-colors hover:text-gray-700"
+          className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-lg text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
           aria-label="Close about EasyTableOne"
         >
           <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
@@ -46,6 +48,9 @@ export default function AboutModal() {
         <h2 id="about-modal-title" className="text-2xl font-bold text-gray-900">
           About EasyTableOne
         </h2>
+        <p data-testid="about-version" className="mt-1 text-xs text-gray-500">
+          Version {APP_VERSION} · journal rulesets v{journalRulesets.EasyTableOne_Ruleset.version}
+        </p>
         <p className="mt-1 text-sm font-semibold text-blue-700">{LAB_NAME} - {LAB_TAGLINE}</p>
         <p className="mt-4 text-sm text-gray-700">{LAB_DESCRIPTION}</p>
         <div className="mt-3 flex flex-wrap gap-3 text-sm">

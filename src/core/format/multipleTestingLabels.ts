@@ -1,6 +1,8 @@
 import type { AnalysisPlan } from "../types";
 
-type MultipleTestingCorrection = AnalysisPlan["multipleTestingCorrection"];
+/** Supported multiplicity procedures selected in the analysis plan. */
+export type MultipleTestingCorrection = AnalysisPlan["multipleTestingCorrection"];
+
 
 export const multipleTestingLabels: Record<
   MultipleTestingCorrection,

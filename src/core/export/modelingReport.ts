@@ -20,7 +20,8 @@ import { PYODIDE_VERSION } from "../runtimeEnvironment";
 import type { Schema } from "../types";
 import type { ReportAsset } from "./unifiedReport";
 
-type DocxChild = Paragraph | Table;
+/** A paragraph or table node emitted into the modeling report DOCX body. */
+export type DocxChild = Paragraph | Table;
 
 function fmt(value: number | null | undefined, digits = 3): string {
   if (value === null || value === undefined || Number.isNaN(value)) return "-";
@@ -209,6 +210,8 @@ function tripodChecklistMarkdown(): string {
   }
   return lines.join("\n");
 }
+
+
 
 export function buildModelingReportMarkdown(
   results: ModelingResults,
@@ -418,6 +421,8 @@ function subgroupDocxChildren(groups: SubgroupPerformance[]): DocxChild[] {
   return children;
 }
 
+
+
 export function buildModelingReportDocxChildren(results: ModelingResults, schema?: Schema | null): DocxChild[] {
   const setup = results.setup;
   const rationales = getModelingRationales(setup, results);
@@ -548,6 +553,8 @@ function figureDocxChildren(assets: ReportAsset[] = []): DocxChild[] {
   }
   return children;
 }
+
+
 
 export async function exportModelingReportDocx(results: ModelingResults, schema?: Schema | null, appVersion = "unknown", figureAssets: ReportAsset[] = []): Promise<Blob> {
   const doc = new Document({

@@ -1,5 +1,7 @@
 # EasyTableOne
 
+[![CI](https://github.com/Pharmaco-OmicsLab/easytableone/actions/workflows/ci.yml/badge.svg)](https://github.com/Pharmaco-OmicsLab/easytableone/actions/workflows/ci.yml)
+
 A client-side web application that generates publication-ready "Table 1" baseline
 characteristics tables for clinical research. All parsing and computation run inside the
 user's browser through [Pyodide](https://pyodide.org) — a WebAssembly build of CPython — so
@@ -18,9 +20,10 @@ pnpm install
 pnpm dev
 ```
 
-Requires Node.js ≥ 20 and pnpm. To run the built application, any current browser with
-WebAssembly support (Chrome, Edge, Firefox, Safari) is sufficient; there is no server
-component.
+Requires Node.js ≥ 20 and pnpm. To run the built application, a current desktop browser
+with WebAssembly and Web Worker support is sufficient; there is no server component.
+Release v3.19.2 was tested in Google Chrome 155 and, through the automated end-to-end
+tests, in Chromium 147, Firefox 148 and WebKit 26.4.
 
 ### Commands
 
@@ -110,8 +113,9 @@ conventional for a descriptive baseline table, and the choice is recorded in the
 
 The engine supervises the analysis rather than executing silently. Findings are graded as
 *advisory*, or as *review* items that must be acknowledged before the analysis proceeds.
-Nothing is excluded automatically: the user decides, and the decision and its stated reason
-enter the audit log.
+Identifier-like columns and categorical columns with more than 20 levels are excluded by
+default; the user can review and re-include them in the Schema step. The decision and its
+stated reason enter the audit log.
 
 | Condition | Threshold | Tier |
 | --- | --- | --- |
@@ -122,7 +126,9 @@ enter the audit log.
 | Sparse contingency cells | Minimum expected count < 5 | Automatic switch to Fisher's exact |
 | Cochran advisory | > 20% of expected counts < 5 | Advisory |
 | Dataset size | > 50,000 rows | Informational notice at import |
-| Dataset size | > 150,000 rows | Explicit acknowledgement required before modelling |
+| Dataset size | > 100,000 rows | Upload is rejected; analyse a random subsample or subset |
+
+Datasets are limited to 100,000 rows because the analysis runs in your browser's memory.
 | Constant / near-constant columns | Single level, or a category of size 1 | Flagged at the data-quality step |
 | Identifier-like columns | Detected heuristically | Excluded from the table |
 
@@ -148,22 +154,24 @@ events-per-variable ratio is low, with the reasoning shown to the user.
 
 | Model | Configuration |
 | --- | --- |
-| Random Forest | 200 trees, unrestricted depth, minimum leaf size 1 |
+| Random Forest | 100 trees (fast) / 200 trees (thorough), unrestricted depth, minimum leaf size 1 |
 | Naïve Bayes | Gaussian estimator with default variance smoothing for continuous-only designs; mixed Gaussian/Bernoulli estimator when the design matrix contains one-hot indicators |
-| Support-vector classification | Radial basis kernel, C = 1, γ = "scale", Platt-scaled probabilities |
+| Support-vector classification | If inner CV is unavailable: radial basis kernel, C = 1 and γ = "scale". With inner CV: ROC-AUC grid search; fast uses C ∈ {0.5, 1.0}, γ = "scale"; thorough uses C ∈ {0.25, 1.0, 4.0}, γ ∈ {"scale", "auto"}. Probabilities are calibrated. |
 | Penalised logistic | Penalty selected over scikit-learn's ten-point log-spaced grid by inner stratified cross-validation (up to 5 folds, bounded by the smaller class count); one-standard-error rule by default, minimum-deviance rule available |
 | Firth logistic | Used automatically when separation is detected |
 
 ### Validation
 
-| Aspect | Thorough setting (default) | Fast setting |
+| Aspect | Thorough setting | Fast setting (default) |
 | --- | --- | --- |
 | Logistic validation | Harrell's optimism-corrected bootstrap, 1000 resamples, out-of-bag percentile intervals | 200 resamples |
-| Penalty re-selection | Inside every bootstrap resample | Single selection |
+| Penalty re-selection | Re-selected inside every bootstrap resample | Selected once on full data and held fixed across bootstrap resamples |
 | ML comparison | Repeated stratified 5-fold CV, 10 repeats | 3 repeats |
 
 Reported metrics: ROC-AUC, calibration slope and intercept, Brier score, decision-curve
-(net-benefit) analysis, and subgroup/fairness metrics. Reporting is aligned to TRIPOD+AI.
+(net-benefit) analysis, and subgroup/fairness metrics. In the fast setting the penalty is
+selected once and held fixed, which can understate optimism; the thorough setting is
+recommended for reported results. Reporting is aligned to TRIPOD+AI.
 
 ### Missing predictors
 
@@ -187,6 +195,8 @@ preview. The ruleset version is embedded in every export.
 To add a journal, add an entry to `journal_rulesets.json`; no application code needs to
 change.
 
+See the [ruleset reference](./docs/RULESETS.md) for the schema and update procedure.
+
 ---
 
 ## Exports and reproducibility
@@ -199,13 +209,25 @@ change.
 | Reproducibility script | Standalone `analysis_history.py` |
 
 The JSON record captures application, ruleset and library versions, the analysis plan with
-its audit log, the inferred schema and the aggregate results. It contains no protected
-health information by default; an optional input-file hash is available but disabled.
+its audit log, the inferred schema and the aggregate results. It contains aggregate statistics only; see [Data Locality](./docs/DATA_LOCALITY.md) for details. An optional input-file hash is available but disabled.
 
 The exported Python script imports pandas, SciPy and statsmodels directly, has no dependency
 on EasyTableOne, and regenerates the analysis from the source file. Because it calls the
 same functions the application called, it reproduces the computation with the identical
 engine rather than a transcription into another language.
+
+See [Reproducibility JSON](./docs/REPRODUCIBILITY_JSON.md) and [Data Locality](./docs/DATA_LOCALITY.md).
+
+## Documentation
+
+- [Architecture](./docs/ARCHITECTURE.md)
+- [Developing](./docs/DEVELOPING.md)
+- [Contributing](./CONTRIBUTING.md)
+- [Journal rulesets](./docs/RULESETS.md)
+- [Statistical reference](./docs/STATISTICAL_REFERENCE.md)
+- [Reproducibility JSON](./docs/REPRODUCIBILITY_JSON.md)
+- [Data locality](./docs/DATA_LOCALITY.md)
+- [Browser test checklist](./docs/BROWSER_TEST_CHECKLIST.md)
 
 ---
 
@@ -214,13 +236,16 @@ engine rather than a transcription into another language.
 The cross-validation harness runs EasyTableOne and the Python `tableone` package on
 identical inputs inside the same in-browser runtime and compares every summary statistic,
 standardised difference and P value as an unrounded numeric value.
+The [citable validation report](validation/report/EasyTableOne_tableone_validation.docx)
+ships with the public repository; machine-readable results are generated in
+`validation/tableone/` when requested.
 
 ```bash
 pnpm test:golden        # run the comparisons and assertions
 pnpm validation:report  # regenerate the machine-readable artefacts
 ```
 
-Latest run (EasyTableOne 3.18.0 against tableone 0.9.6):
+Latest run (EasyTableOne 3.19.2 against tableone 0.9.6, 20 October 2026):
 
 | Dataset | Records | Variables | Compared | Agreeing | Not comparable |
 | --- | --- | --- | --- | --- | --- |
@@ -238,7 +263,7 @@ itemised in the supplementary material of the accompanying paper. See
 ## Citation
 
 If you use EasyTableOne in published work, please cite the accompanying software paper and
-the archived release. Both will be listed here on publication.
+the tagged release [v3.19.2](https://github.com/Pharmaco-OmicsLab/EasyTableOne/releases/tag/v3.19.2).
 
 ---
 

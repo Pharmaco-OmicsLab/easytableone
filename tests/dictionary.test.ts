@@ -163,10 +163,11 @@ describe("dictionary", () => {
       ],
     };
     const formatted = formatTable(stats, "NEJM", plan, schema, "1.0");
-    // Variable row uses display label, not raw "[b1]GA"
+    // Exported Table 1 row labels stay clean; D98 diagnostic labels never enter this path.
     const firstVarCell = formatted.rows[0].cells[0];
     expect(firstVarCell).toMatch(/^Gestational age/);
     expect(firstVarCell).not.toMatch(/\[b1\]/);
+    expect(firstVarCell).not.toContain("(GA)");
     // Title also strips brackets from grouping label
     expect(formatted.title).toContain("Edema");
     expect(formatted.title).not.toContain("[c10]");
@@ -277,7 +278,7 @@ describe("dictionary", () => {
       ],
     };
     const py = generateAnalysisHistory(plan, stats, schema, { filename: "fungi.xlsx" });
-    expect(py).toContain("# === Gestational age ===");
+    expect(py).toContain("# === Gestational age, Mean (SD) ===");
     expect(py).not.toContain("# === [b1]GA ===");
   });
 

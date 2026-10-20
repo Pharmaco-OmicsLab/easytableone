@@ -29,6 +29,17 @@ export function getColumnDisplayLabel(
   return fallback === 'stripped' ? stripBracketCodes(column.name) : column.name;
 }
 
+/**
+ * Diagnostic surfaces only (QA findings, EDA, Analysis-plan pickers).
+ * Never use for Table 1 output, which must keep row labels publication-ready.
+ */
+export function getColumnDiagnosticLabel(column: SchemaColumn | undefined): string {
+  if (!column) return '';
+  const display = getColumnDisplayLabel(column);
+  const raw = column.name.trim();
+  return display && display !== raw ? `${display} (${raw})` : raw;
+}
+
 export function formatCodeAsInteger(code: string): string {
   const num = parseFloat(code);
   if (!isNaN(num) && Number.isInteger(num)) {

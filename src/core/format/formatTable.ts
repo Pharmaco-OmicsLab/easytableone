@@ -25,6 +25,8 @@ export const journalRulesets = journalRulesetsJson as unknown as JournalRuleset;
 
 const NEGATIVE_LABEL = /^(no|none|neg(ative)?|absent|alive|surviv(al|ed|or)?|false|without|non[- ].*|no[- ].*|0|control)$/i;
 
+
+
 export function chooseDefaultBinaryDisplayLevel(
   countsDict: Record<string, number>,
   schemaCol?: Schema["columns"][number],
@@ -62,6 +64,39 @@ export function chooseDefaultBinaryDisplayLevel(
   return levelForBinaryChoice ?? observedKeys[1] ?? observedKeys[0] ?? "";
 }
 
+
+
+export function buildContinuousLabel(
+  label: string,
+  summary: string,
+  unit?: string | null,
+  template?: string,
+): string {
+  if (!unit || !unit.trim()) {
+    return `${label}, ${summary}`;
+  }
+
+  const effectiveTemplate = template || "{label} ({unit}), {summary}";
+  return effectiveTemplate.replace(/\{(\w+)\}/g, (match, key) => {
+    if (key === "label") return label;
+    if (key === "summary") return summary;
+    if (key === "unit") return unit;
+    return match;
+  });
+}
+
+
+
+export function getContinuousSummaryString(
+  testName: string,
+  summaryStatistics: JournalConfig["summary_statistics"],
+): string {
+  const isNormal = testName !== "Mann-Whitney U" && testName !== "Kruskal-Wallis";
+  return isNormal
+    ? summaryStatistics.continuous_normal
+    : summaryStatistics.continuous_non_normal;
+}
+
 /**
  * Format a number to a specified number of decimal places
  */
@@ -71,10 +106,18 @@ function formatNumber(value: number, decimals: number, separator = "."): string 
   return str.replace(".", separator);
 }
 
+function parseJournalBound(value: string, decimalSeparator = "."): number {
+  const normalized = value.trim().replace(/[·,]/g, ".").replace(decimalSeparator, ".");
+  return Number(normalized);
+}
+
 /**
- * Format P-value according to journal rules
+ * Formats a P value using the selected journal's threshold, decimal separator, and precision rules.
+ * Null/NaN values render as `-`; values below `threshold_low` use that threshold string. When configured,
+ * significant figures take precedence over maximum decimal places (D109); decimal bounds are parsed with
+ * the journal separator so a midline-dot threshold remains numeric.
  */
-function formatPValue(
+export function formatPValue(
   pValue: number | null,
   formatting: JournalConfig["p_value_formatting"]
 ): string {
@@ -86,13 +129,14 @@ function formatPValue(
     conditional_decimals,
     threshold_low,
     decimal_separator = ".",
+    significant_figures,
   } = formatting;
 
   // Handle threshold low
   let isLow = false;
   let thresholdVal = 0.001; // default fallback
   if (threshold_low.startsWith("<")) {
-    thresholdVal = parseFloat(threshold_low.substring(1).replace(",", "."));
+    thresholdVal = parseJournalBound(threshold_low.substring(1), decimal_separator);
     if (pValue < thresholdVal) {
       isLow = true;
     }
@@ -111,7 +155,7 @@ function formatPValue(
       if (cond.range.startsWith(">=") || cond.range.startsWith(">")) {
         const isGte = cond.range.startsWith(">=");
         const valStr = cond.range.replace(">=", "").replace(">", "").trim();
-        const val = parseFloat(valStr);
+        const val = parseJournalBound(valStr, decimal_separator);
         if ((isGte && pValue >= val) || (!isGte && pValue > val)) {
           if (cond.display) explicitDisplay = cond.display;
           if (cond.decimals !== undefined) decimals = cond.decimals;
@@ -119,8 +163,8 @@ function formatPValue(
         }
       } else if (cond.range.includes("to")) {
         const [lowStr, highStr] = cond.range.split("to").map((s) => s.trim());
-        const low = parseFloat(lowStr);
-        const high = parseFloat(highStr);
+        const low = parseJournalBound(lowStr, decimal_separator);
+        const high = parseJournalBound(highStr, decimal_separator);
         if (pValue >= low && pValue <= high) {
           if (cond.display) explicitDisplay = cond.display;
           if (cond.decimals !== undefined) decimals = cond.decimals;
@@ -132,6 +176,12 @@ function formatPValue(
 
   if (explicitDisplay) return explicitDisplay;
 
+  if (significant_figures !== undefined) {
+    const significant = pValue.toPrecision(significant_figures);
+    if (/[eE]/.test(significant)) return threshold_low;
+    return decimal_separator === "." ? significant : significant.replace(".", decimal_separator);
+  }
+
   let formatted = formatNumber(pValue, decimals, decimal_separator);
 
   if (!leading_zero && formatted.startsWith("0")) {
@@ -141,6 +191,14 @@ function formatPValue(
   return formatted;
 }
 
+
+
+/**
+ * Converts validated statistical results and the analysis context into the journal-specific display table.
+ * All rendered statistics are formatted from the selected ruleset and recorded user overrides; this function
+ * does not recompute statistical results. Journal-only rules, including JAMA's denominator-based percentage
+ * precision (D108) and Lancet's P-value precision (D109), are applied here for parity across exporters.
+ */
 export function formatTable(
   stats: StatisticalResults,
   journalId: string,
@@ -172,6 +230,17 @@ export function formatTable(
 
   function formatSmd(value: number): string {
     return formatSmdValue(value, decSep);
+  }
+
+  function formatCategoricalCell(count: number, percentage: number, analyzedN: number, groupN: number): string {
+    const conditional = summary_statistics.percentage_decimals_rule;
+    const decimals = conditional && analyzedN < conditional.below_n
+      ? conditional.decimals
+      : summary_statistics.percentage_decimals;
+    const formattedPct = formatNumber(percentage, decimals, decSep);
+    return analyzedN !== groupN
+      ? `${count}/${analyzedN} (${formattedPct}%)`
+      : `${count} (${formattedPct}%)`;
   }
 
   const header: string[] = ["Characteristic"];
@@ -256,9 +325,7 @@ export function formatTable(
     const isSkipped = v.test.name === 'None';
 
     const summaryType = isContinuous
-      ? isNormal
-        ? summary_statistics.continuous_normal
-        : summary_statistics.continuous_non_normal
+      ? getContinuousSummaryString(v.test.name, summary_statistics)
       : summary_statistics.categorical;
 
     // Check if it's a binary categorical variable represented as a single row
@@ -286,8 +353,17 @@ export function formatTable(
     const rowPrecision = resolveRowPrecision(rowValues, numFmtOpts);
 
     if (isSingleRowSummary) {
-      // Add summary text to the variable name if it's compact style
-      varRow.cells[0] += `, ${summaryType}`;
+      if (isContinuous) {
+        varRow.cells[0] = buildContinuousLabel(
+          variableDisplayLabel,
+          summaryType,
+          varSchemaCol?.units,
+          summary_statistics.continuous_label_template,
+        );
+      } else {
+        // Add summary text to the variable name if it's compact style
+        varRow.cells[0] += `, ${summaryType}`;
+      }
       
       let levelForBinary = "";
       if (isCategorical && countsDict) {
@@ -349,8 +425,7 @@ export function formatTable(
             return;
           }
           const n = groupCounts[levelForBinary] || 0;
-          const pct = formatNumber(groupPcts[levelForBinary] || 0, summary_statistics.percentage_decimals, decSep);
-          varRow.cells.push(`${n} (${pct}%)`);
+          varRow.cells.push(formatCategoricalCell(n, groupPcts[levelForBinary] || 0, groupStat.n, g.n));
         }
       });
     } else {
@@ -423,8 +498,7 @@ export function formatTable(
               subRow.cells.push("-");
             } else {
               const n = groupCounts[level] || 0;
-              const pct = formatNumber(groupPcts[level] || 0, summary_statistics.percentage_decimals, decSep);
-              subRow.cells.push(`${n} (${pct}%)`);
+              subRow.cells.push(formatCategoricalCell(n, groupPcts[level] || 0, groupStat.n, g.n));
             }
           }
         });
@@ -444,7 +518,7 @@ export function formatTable(
     if (showMissingDataRows && missingRecord && missingRecord.missingCount > 0) {
       const missingRow: FormattedTable["rows"][0] = {
         indent: table_styling.indent_subgroups ? 1 : 0,
-        cells: [`${missingDataLabel}, n (%)`],
+        cells: [`${missingDataLabel}, ${summary_statistics.categorical}`],
         isSubgroup: true,
         footnoteRefs: [],
       };
@@ -453,7 +527,11 @@ export function formatTable(
         const missing_g = Math.max(0, g.n - groupAnalyzedN);
         const pct_g = g.n > 0 ? (missing_g / g.n) * 100 : 0;
         const formattedCount = fmtStat(missing_g, 0);
-        const formattedPct = formatNumber(pct_g, summary_statistics.percentage_decimals, decSep);
+        const conditional = summary_statistics.percentage_decimals_rule;
+        const decimals = conditional && g.n < conditional.below_n
+          ? conditional.decimals
+          : summary_statistics.percentage_decimals;
+        const formattedPct = formatNumber(pct_g, decimals, decSep);
         missingRow.cells.push(`${formattedCount} (${formattedPct}%)`);
       });
       if (header.includes("SMD")) {
@@ -466,7 +544,7 @@ export function formatTable(
     }
   }
 
-  const methodsParagraph = generateMethodsParagraph(stats, ruleset, plan, appVersion);
+  const methodsParagraph = generateMethodsParagraph(stats, ruleset, plan, appVersion, plan.userOverrides, dataQualityRecords, summary_statistics.categorical);
 
   // Step 7: generate title with grouping variable annotation.
   const groupingLabel = groupingSchemaCol
@@ -555,7 +633,7 @@ export function formatTable(
       }
 
       activeRecords.forEach((r) => {
-        if (r.finding.checkId === "groupImbalance" || r.finding.checkId.startsWith("groupImbalance_")) {
+        if (r.finding.checkId === "groupImbalance" || r.finding.checkId.startsWith("groupImbalance_") || r.finding.checkId.startsWith("smallCategoryLevel_")) {
           return;
         }
         const colName = r.finding.variable;
@@ -624,6 +702,9 @@ export function formatTable(
           const count = r.finding.affectedCount || 0;
           const varWord = count === 1 ? "variable has" : "variables have";
           text = `${count} ${varWord} no display label; ${r.response} and analysis proceeded.`;
+        } else if (r.finding.checkId.startsWith("missing_code")) {
+          const codes = (r.finding.sampleValues ?? []).join(", ");
+          text = `${r.finding.affectedCount} value(s) coded ${codes} in *${displayVar}* were treated as missing.`;
         } else {
           text = `${r.finding.title}${colName ? ` in ${displayVar}` : ""}; ${r.response} and analysis proceeded.`;
         }

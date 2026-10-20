@@ -4,6 +4,7 @@ import { isFisherLike } from "../format/testName";
 import { getModelingRationales, getRocAveragingRationale, getVariableImportanceRationale } from "../modeling/rationale";
 import type { MethodRationale } from "../modeling/rationale";
 import type { StatisticalResults } from "../types";
+import { SMD_GLOSSARY } from "../../content/smdGuidance";
 import type { DecisionExplanation, EducationContext, ExplanationBody, ExplanationDepth, StageId, StageOverview } from "./educationTypes";
 
 export const STAGE_ORDER: StageId[] = ["upload", "sheet-header", "dictionary", "schema", "qa", "plan", "stats", "modeling", "export"];
@@ -16,7 +17,7 @@ export const STAGE_DECISIONS: Record<StageId, string[]> = {
   "sheet-header": [],
   dictionary: [],
   schema: ["schema.type-inference", "schema.reference-level", "schema.ordinal-order", "schema.exclusions"],
-  qa: ["qa.gates", "qa.sanity-bounds", "qa.table1-missing-data", "qa.eda-correlation", "qa.eda-vif", "qa.eda-mcar", "qa.eda-mosaic"],
+  qa: ["qa.gates", "qa.small-category", "qa.sanity-bounds", "qa.table1-missing-data", "qa.eda-correlation", "qa.eda-vif", "qa.eda-mcar", "qa.eda-mosaic"],
   plan: ["plan.grouping-variable", "plan.group-order", "plan.variable-order"],
   stats: ["stats.test-selection", "stats.normality-basis", "stats.yates", "stats.posthoc", "stats.smd", "stats.multiple-testing", "stats.baseline-testing"],
   modeling: ["modeling.model", "modeling.validation", "modeling.performanceCi", "modeling.ci", "modeling.imputation", "modeling.importance", "modeling.roc", "modeling.lambda"],
@@ -292,6 +293,20 @@ const staticBuilders: Record<string, (context?: EducationContext) => DecisionExp
       alternatives: "Resolve the source data, edit variable metadata, acknowledge a review warning with rationale, dismiss advisory polish, or re-upload a corrected workbook.",
     },
   ),
+  "qa.small-category": () => simpleDecision(
+    "qa.small-category",
+    "Small categories",
+    {
+      what: "Data checks flag an observed table-variable level with fewer than 10 patients.",
+      why: "Percentages based on only a few patients are unstable and the level can make a table sparse. This is an advisory; it does not block Proceed or change the analysis.",
+      alternatives: "Consider combining the level with a related one in the source data, or report it with care. The threshold is 10 observations.",
+    },
+    {
+      what: "The small-category check counts observed, non-missing values in each included binary or categorical table variable and flags levels with n < 10.",
+      why: "A percentage calculated from a handful of patients can vary substantially with one observation, and rare levels may also make a table sparse. The threshold is 10 observations; missing values and missing codes treated as missing are not counted. The advisory is informational, needs no acknowledgement, and leaves the analysis unchanged.",
+      alternatives: "Review the source coding and consider combining a level with a clinically related category when justified, or keep the level and interpret its percentage carefully. The app does not merge levels automatically.",
+    },
+  ),
   "qa.sanity-bounds": () => simpleDecision(
     "qa.sanity-bounds",
     "Sanity bounds",
@@ -428,7 +443,7 @@ const staticBuilders: Record<string, (context?: EducationContext) => DecisionExp
     },
     {
       what: "Automatic per-variable statistical test selection for the Statistical Review stage.",
-      why: `The app chooses among Welch's t-test, ANOVA, Mann-Whitney U, Kruskal-Wallis, chi-square, Fisher's exact, or no test based on type, group count, normality diagnostics, sparsity, and notes from the computed results. ${context?.plan?.testOverrides?.length ? "One or more user test overrides are present in the plan." : "No user test overrides are recorded in the current plan."}`,
+      why: `The app chooses among Welch's t-test, ANOVA, Mann-Whitney U, Kruskal-Wallis, chi-square, Fisher's exact, or no test based on type, group count, normality diagnostics, sparsity, and notes from the computed results. Ordered categorical variables with at least 3 levels can opt into a rank test (Mann-Whitney U or Kruskal-Wallis on level ranks). ${context?.plan?.testOverrides?.length ? "One or more user test overrides are present in the plan." : "No user test overrides are recorded in the current plan."}`,
       alternatives: "Use Variable types to correct variable type, Analysis plan to set a test override, or journal/display controls to suppress P-values when the study design calls for SMD-only reporting.",
     },
   ),
@@ -473,8 +488,8 @@ const staticBuilders: Record<string, (context?: EducationContext) => DecisionExp
     "stats.smd",
     "Standardized mean difference",
     {
-      what: "SMD is an effect-size balance measure.",
-      why: "It is less driven by sample size than a P-value and is preferred for baseline balance checks.",
+      what: SMD_GLOSSARY,
+      why: "It measures the size of a between-group difference rather than its statistical significance, which is what matters when judging balance in trials and in observational exposure comparisons.",
       alternatives: "Show P-values, SMDs, both, or SMD-only through the plan/display options.",
     },
   ),

@@ -4,6 +4,7 @@ import QAStage from './QAStage';
 import { useStore } from '../../store';
 import type { DataQualityFinding } from '../../core/types';
 import { TABLE1_MISSING_DATA_SIGNPOST } from '../../core/education/educationContent';
+import { formatTable } from '../../core/format/formatTable';
 
 let mockedFindings: DataQualityFinding[] = [];
 
@@ -19,6 +20,10 @@ vi.mock('../../core/qa/checkRegistry', async (importOriginal) => {
     })
   };
 });
+
+vi.mock('../../workers/pyodide.client', () => ({
+  pyodideClient: { computeEDA: vi.fn(), isReady: vi.fn(async () => true), restart: vi.fn(async () => true) },
+}));
 
 function seedStoreWithQAReport(findings: DataQualityFinding[] = []) {
   mockedFindings = findings;
@@ -92,7 +97,7 @@ describe('QAStage — Layout & Actions (Round 8b)', () => {
     expect(screen.queryByText("Column")).toBeNull();
   });
 
-  it('Proceed button is disabled if a blocking finding is present', () => {
+  it('Proceed is aria-disabled, linked to the blocking reason, and a no-op while blocked', () => {
     const blockingFinding: DataQualityFinding = {
       checkId: "noDataRows",
       tier: "blocking",
@@ -105,10 +110,11 @@ describe('QAStage — Layout & Actions (Round 8b)', () => {
     seedStoreWithQAReport([blockingFinding]);
     render(<QAStage />);
 
-    const proceedText = screen.getByText("Resolve blocking issues to proceed");
-    expect(proceedText).toBeDefined();
-    const actionBtn = screen.getByText("Acknowledge all and proceed");
-    expect(actionBtn.getAttribute("disabled")).toBe("");
+    const actionBtn = screen.getByTestId("qa-proceed");
+    expect(actionBtn.getAttribute("aria-disabled")).toBe("true");
+    expect(document.getElementById(actionBtn.getAttribute("aria-describedby")!)?.textContent).toContain("blocking issue");
+    fireEvent.click(actionBtn);
+    expect(useStore.getState().stage).toBe(5);
   });
 
   it('shows unresolved date columns only in the actionable Data Quality Gate panel', () => {
@@ -132,6 +138,24 @@ describe('QAStage — Layout & Actions (Round 8b)', () => {
     expect(screen.queryByText("Blocking Errors")).toBeNull();
   });
 
+  it('uses the green clear status when no blocking or unacknowledged review findings remain', () => {
+    seedStoreWithQAReport([]);
+    render(<QAStage />);
+    expect(screen.getByText('All issues resolved or acknowledged')).toBeTruthy();
+    const proceed = screen.getByTestId('qa-proceed');
+    expect(proceed.getAttribute('aria-disabled')).toBeNull();
+  });
+
+  it('logs outlier choices through the existing store action and exposes pressed state', () => {
+    seedStoreWithQAReport([]);
+    useStore.setState({ qaReport: { blockingErrors: [], columns: [{ name: 'colA', missingCount: 0, missingPercent: 0, cardinality: 2, flags: [], outliers: { values: [99], rowIndices: [1] } }] } as any });
+    render(<QAStage />);
+    const exclude = screen.getByRole('button', { name: 'Exclude colA row 1' });
+    fireEvent.click(exclude);
+    expect(exclude.getAttribute('aria-pressed')).toBe('true');
+    expect(useStore.getState().outlierActions.colA).toEqual(expect.arrayContaining([expect.objectContaining({ rowIndex: 1, action: 'exclude' })]));
+  });
+
   it('renders the EDA panel after the Polish Advisor slot and before QA details', () => {
     const polishFinding: DataQualityFinding = {
       checkId: "highMissingness_colA",
@@ -148,7 +172,7 @@ describe('QAStage — Layout & Actions (Round 8b)', () => {
 
     const text = document.body.textContent ?? "";
     expect(text.indexOf("Data Quality Gate")).toBeLessThan(text.indexOf("Exploratory Data Analysis"));
-    expect(text.indexOf("Exploratory Data Analysis")).toBeLessThan(text.indexOf("QA / QC Details"));
+    expect(text.indexOf("Data Quality Gate")).toBeLessThan(text.indexOf("QA / QC Details"));
   });
 
   it('renders Round 9 decision explainers for QA gates and sanity bounds', () => {
@@ -190,7 +214,7 @@ describe('QAStage — Layout & Actions (Round 8b)', () => {
     fireEvent.click(ackBtn);
     
     // Now the button should transition to "Proceed"
-    const proceedBtn = screen.getByText("Proceed");
+    const proceedBtn = screen.getByText("Proceed to Analysis plan");
     expect(proceedBtn).toBeDefined();
     
     // Click Proceed
@@ -200,4 +224,59 @@ describe('QAStage — Layout & Actions (Round 8b)', () => {
     const state = useStore.getState();
     expect(state.stage).toBe(6);
   });
+
+  it('preserves applied polish findings in dataQualityRecords when proceeding', () => {
+    seedStoreWithQAReport([]);
+    const finding = {
+      detectorId: 'whitespace_inconsistency',
+      category: 'quality' as const,
+      variable: 'colA',
+      title: 'Whitespace inconsistency',
+      affectedCount: 2,
+      sampleRows: [],
+      confidence: 'high' as const,
+      variants: ['pallar', 'pallar '],
+      suggestedCanonical: 'pallar',
+    };
+    useStore.getState().applyPolishFinding(finding, 'pallar');
+    expect(useStore.getState().dataQualityRecords.some((r) => r.response === 'applied')).toBe(true);
+
+    render(<QAStage />);
+    const proceedBtn = screen.getByTestId('qa-proceed');
+    fireEvent.click(proceedBtn);
+
+    const records = useStore.getState().dataQualityRecords;
+    expect(records.some((r) => r.response === 'applied' && r.finding.checkId === 'whitespace_inconsistency_colA')).toBe(true);
+
+    const stateAfter = useStore.getState();
+    const formatted = formatTable(
+      {
+        perVariable: [],
+        groups: [],
+        totalN: 0,
+        computeMetadata: { libVersions: {}, seed: 42 },
+      },
+      'NEJM',
+      {
+        rulesetVersion: '1.3',
+        appVersion: '1.0',
+        researchPopulation: 'adult',
+        studyDesign: 'unspecified',
+        unitSystem: 'metric',
+        groupingVariable: 'colA',
+        includedVariables: ['colA'],
+        variableConfig: {},
+        showSMD: false,
+        showPValue: false,
+        multipleTestingCorrection: 'none',
+        randomSeed: 42,
+        auditLog: [],
+      },
+      stateAfter.schema!,
+      '1.0',
+      stateAfter.dataQualityRecords
+    );
+    expect(formatted.dataQualityNotes?.some((n) => n.includes("Merged 2 whitespace variants in *colA* to 'pallar'; applied."))).toBe(true);
+  });
 });
+

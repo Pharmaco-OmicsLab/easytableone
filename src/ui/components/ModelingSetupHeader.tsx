@@ -127,9 +127,6 @@ export default function ModelingSetupHeader({ data, schema, setup, onSetupChange
   }, [currentOutcomeEligible, modeledEvent.event, onSetupChange, setup]);
 
   const invalidPlain = regime ? !regime.plainMleAllowed : false;
-  const outcomeCounts = Object.values(meta.class_counts);
-  const eventCount = outcomeCounts.length > 0 ? Math.min(...outcomeCounts) : 0;
-  const epv = meta.p > 0 ? eventCount / meta.p : null;
   const modelingRationale = getModelingRationales(setup);
   const update = (patch: Partial<ModelingSetup>) => onSetupChange({ ...setup, ...patch });
   const usesOutcomeAwareImputation = setup.imputation.policy === "knn" || setup.imputation.policy === "rf" || setup.imputation.policy === "mice";
@@ -174,8 +171,8 @@ export default function ModelingSetupHeader({ data, schema, setup, onSetupChange
   const modeledReferenceLabel = modeledEvent.reference && outcomeColumn ? resolveLevelLabel(modeledEvent.reference, outcomeColumn) : modeledEvent.reference;
 
   return (
-    <section className="border-b border-gray-200 bg-white px-5 py-4">
-      <div className="grid gap-4 lg:grid-cols-[1.1fr_1.4fr_0.8fr]">
+    <section className="space-y-4 bg-white p-0">
+      <div className="grid gap-4 sm:grid-cols-2">
         <label className="text-sm font-medium text-gray-800">
           Outcome
           <select
@@ -296,13 +293,13 @@ export default function ModelingSetupHeader({ data, schema, setup, onSetupChange
         <summary className="cursor-pointer select-none font-semibold">Modeling guardrails</summary>
         <div className="mt-3 grid gap-2 md:grid-cols-2">
           <p>
-            <strong>When not to model:</strong> Be cautious with tiny datasets or rare outcomes. Current N is {meta.n}; smallest outcome class is {eventCount || "not selected"}.
+            <strong>When not to model:</strong> Be cautious with tiny datasets or rare outcomes. {regime ? `Current N is ${regime.n}; smaller class has ${regime.events} observations.` : "The engine is evaluating this outcome and predictor set."}
           </p>
           <p>
             <strong>Outcome requirement:</strong> Choose a binary or two-level categorical outcome with enough observations in both classes.
           </p>
           <p>
-            <strong>Events per variable:</strong> {epv === null ? "Select predictors to estimate EPV." : `${eventCount} events / ${meta.p} expanded predictor terms = ${epv.toFixed(1)} EPV.`} {regime?.rationale ?? modelingRationale.model.why}
+            <strong>Events per variable:</strong> {regime ? `${regime.events} events / ${regime.p} expanded predictor terms = ${regime.epv.toFixed(1)} EPV.` : "Select an outcome and predictors to estimate EPV."} {regime?.rationale ?? modelingRationale.model.why}
           </p>
           <p>
             <strong>Leakage and validation:</strong> Do not include predictors measured after the outcome. {modelingRationale.logisticValidation.plain}
@@ -391,7 +388,7 @@ export default function ModelingSetupHeader({ data, schema, setup, onSetupChange
       </div>
 
       {expanded && (
-        <div className="mt-4 grid gap-3 border-t border-gray-100 pt-4 md:grid-cols-4">
+          <div className="mt-4 grid gap-3 border-t border-gray-100 pt-4 sm:grid-cols-2">
           <div className="md:col-span-2">
             <label className="text-sm font-medium text-gray-800">
               Imputation

@@ -10,6 +10,8 @@ import LogisticRegressionTab from "../components/LogisticRegressionTab";
 import MachineLearningTab from "../components/MachineLearningTab";
 import ModelingSetupHeader from "../components/ModelingSetupHeader";
 import AboutThisStep from "../components/AboutThisStep";
+import StepHeader from "../layout/StepHeader";
+import StepActionBar from "../layout/StepActionBar";
 
 function predictorExpansion(schema: Schema, predictors: string[]) {
   return predictors.reduce((sum, name) => {
@@ -162,96 +164,41 @@ export default function ModelingStage() {
     }
   };
 
+  const hasRun = Boolean(modelingResults?.logistic || modelingResults?.ml);
   return (
-    <div className="mx-auto max-w-7xl overflow-hidden rounded border border-gray-200 bg-gray-50">
-      <div className="border-b border-gray-200 bg-white px-5 py-4">
-        <div className="mb-4">
-          <AboutThisStep stage="modeling" />
-        </div>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 className="text-2xl font-bold text-gray-900">Modeling</h2>
-            <p className="text-sm text-gray-600">Logistic regression is opt-in and runs entirely in the browser worker.</p>
+    <div className="mx-auto max-w-7xl space-y-5 pb-4">
+      <AboutThisStep stage="modeling" />
+      <StepHeader n={6} eyebrow="MODELING (OPTIONAL)" title="Modeling" lede="Table 1 is complete without this step. Use it to fit a logistic regression or benchmark machine-learning classifiers on a binary outcome. Nothing here changes Table 1." next="Format & export" />
+      <div className="grid items-start gap-4 min-[1101px]:grid-cols-[380px_minmax(0,1fr)]">
+        <section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm" aria-label="Model setup">
+          <h2 className="mb-1 text-base font-semibold text-gray-900">Choose a two-group outcome</h2>
+          <p className="mb-3 text-xs text-gray-600">Logistic regression and the benchmark both need a binary outcome.</p>
+          {isVeryLargeDataset && (
+            <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-900" role="alert">
+              <p>{describeLargeNConfirm(data.rows.length)}</p>
+              <label className="mt-2 flex items-center gap-2 font-medium">
+                <input type="checkbox" checked={largeNAcknowledged} onChange={(e) => setLargeNAcknowledged(e.target.checked)} />
+                I understand this may be slow or crash my browser tab, and I want to proceed anyway.
+              </label>
+            </div>
+          )}
+          <ModelingSetupHeader data={data} schema={schema} setup={setup} onSetupChange={setModelingSetup} regime={regime} onRegimeChange={setRegime} />
+        </section>
+
+        <section className="min-w-0 rounded-xl border border-gray-200 bg-white p-4 shadow-sm" aria-label="Model results" aria-live="polite" aria-busy={running || mlRunning}>
+          <div role="tablist" aria-label="Model type" className="mb-4 flex gap-1 border-b border-gray-200">
+            <button type="button" role="tab" aria-selected={activeTab === "logistic"} onClick={() => setActiveTab("logistic")} className={`-mb-px border-b-2 px-3.5 py-2.5 text-sm font-semibold ${activeTab === "logistic" ? "border-blue-600 text-blue-600" : "border-transparent text-gray-600 hover:text-gray-900"}`}>Logistic Regression</button>
+            <button type="button" role="tab" aria-selected={activeTab === "ml"} onClick={() => setActiveTab("ml")} className={`-mb-px border-b-2 px-3.5 py-2.5 text-sm font-semibold ${activeTab === "ml" ? "border-blue-600 text-blue-600" : "border-transparent text-gray-600 hover:text-gray-900"}`}>Machine Learning</button>
           </div>
-          <button onClick={() => setStage(9)} className="rounded border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
-            Skip to Format and export
-          </button>
-        </div>
+          {activeTab === "logistic" ? (
+            <LogisticRegressionTab setup={setup} result={modelingResults?.logistic ?? null} running={running} error={error} onRun={run} confirmedLargeRun={confirmedLargeRun} runtimeEstimate={runtimeEstimate} />
+          ) : (
+            <MachineLearningTab setup={setup} result={modelingResults?.ml ?? null} running={mlRunning} error={mlError} onRun={runMl} confirmedLargeRun={confirmedLargeRun} runtimeEstimate={runtimeEstimate} />
+          )}
+        </section>
       </div>
-
-      <ModelingSetupHeader
-        data={data}
-        schema={schema}
-        setup={setup}
-        onSetupChange={setModelingSetup}
-        regime={regime}
-        onRegimeChange={setRegime}
-      />
-
-      {isVeryLargeDataset && (
-        <div className="border-b border-gray-200 bg-red-50 p-4 text-sm text-red-900">
-          <p>{describeLargeNConfirm(data.rows.length)}</p>
-          <label className="mt-2 flex items-center gap-2 font-medium">
-            <input
-              type="checkbox"
-              checked={largeNAcknowledged}
-              onChange={(e) => setLargeNAcknowledged(e.target.checked)}
-            />
-            I understand this may be slow or crash my browser tab, and I want to proceed anyway.
-          </label>
-        </div>
-      )}
-
-      <div className="px-5 py-5">
-        <div className="mb-4 flex border-b border-gray-200">
-          <button
-            type="button"
-            onClick={() => setActiveTab("logistic")}
-            className={`px-4 py-2 text-sm font-semibold ${activeTab === "logistic" ? "border-b-2 border-blue-600 text-blue-700" : "text-gray-600 hover:text-gray-900"}`}
-          >
-            Logistic Regression
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab("ml")}
-            className={`px-4 py-2 text-sm font-semibold ${activeTab === "ml" ? "border-b-2 border-blue-600 text-blue-700" : "text-gray-600 hover:text-gray-900"}`}
-          >
-            Machine Learning
-          </button>
-        </div>
-        {activeTab === "logistic" ? (
-          <LogisticRegressionTab
-            setup={setup}
-            result={modelingResults?.logistic ?? null}
-            running={running}
-            error={error}
-            onRun={run}
-            confirmedLargeRun={confirmedLargeRun}
-            runtimeEstimate={runtimeEstimate}
-          />
-        ) : (
-          <MachineLearningTab
-            setup={setup}
-            result={modelingResults?.ml ?? null}
-            running={mlRunning}
-            error={mlError}
-            onRun={runMl}
-            confirmedLargeRun={confirmedLargeRun}
-            runtimeEstimate={runtimeEstimate}
-          />
-        )}
-
-        <TripodAiReportingPanel />
-
-        <div className="mt-6 flex justify-between">
-          <button onClick={() => setStage(7)} className="rounded border border-gray-300 bg-white px-4 py-2 text-gray-700 hover:bg-gray-50">
-            Back to Statistical Review
-          </button>
-          <button onClick={() => setStage(9)} className="rounded bg-blue-600 px-6 py-2 text-white hover:bg-blue-700">
-            Continue to Format and export
-          </button>
-        </div>
-      </div>
+      <TripodAiReportingPanel />
+      <StepActionBar onBack={() => setStage(7)} backLabel="Back to Statistical review" status={{ tone: "info", text: "Optional step · does not affect Table 1" }} primary={{ label: hasRun ? "Continue to Format and export" : "Skip to Format and export", onClick: () => setStage(9) }} />
     </div>
   );
 }

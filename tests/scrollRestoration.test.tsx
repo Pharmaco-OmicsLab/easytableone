@@ -1,7 +1,7 @@
 /**
  * Round 12 §3.1 — Scroll restoration regression tests.
  *
- * The main scroll container (#main-scroll-container) must reset to scrollTop=0
+ * The main scroll container (#main) must reset to scrollTop=0
  * on every stage change. Intra-stage state changes must NOT trigger a scroll reset.
  *
  * NOTE: jsdom does not natively implement scrollTo or scrollTop mutation, so
@@ -35,23 +35,23 @@ import React from "react";
 import MainLayout from "../src/ui/layout/MainLayout";
 
 describe("Scroll restoration (Step 12.1)", () => {
-  it("<main> element has the id 'main-scroll-container'", () => {
+  it("<main> element has the id 'main'", () => {
     const { container } = render(<MainLayout />);
-    const main = container.querySelector("#main-scroll-container");
+    const main = container.querySelector("main#main");
     expect(main).not.toBeNull();
     expect(main!.tagName).toBe("MAIN");
   });
 
   it("scrollTop is set to 0 on initial render (stage=1)", async () => {
     const { container } = render(<MainLayout />);
-    const main = container.querySelector("#main-scroll-container") as HTMLElement;
+    const main = container.querySelector("main#main") as HTMLElement;
     // jsdom initializes scrollTop to 0
     expect(main.scrollTop).toBe(0);
   });
 
   it("scrollTop resets to 0 when stage changes", async () => {
     const { container } = render(<MainLayout />);
-    const main = container.querySelector("#main-scroll-container") as HTMLElement;
+    const main = container.querySelector("main#main") as HTMLElement;
 
     // Simulate scrolled state
     Object.defineProperty(main, "scrollTop", { writable: true, value: 500 });
@@ -67,7 +67,7 @@ describe("Scroll restoration (Step 12.1)", () => {
 
   it("intra-stage state change does NOT reset scrollTop", async () => {
     const { container } = render(<MainLayout />);
-    const main = container.querySelector("#main-scroll-container") as HTMLElement;
+    const main = container.querySelector("main#main") as HTMLElement;
 
     // Scroll down then trigger intra-stage state change (setError)
     Object.defineProperty(main, "scrollTop", { writable: true, value: 300 });

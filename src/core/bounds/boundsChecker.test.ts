@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { SchemaColumn } from "../types";
-import { checkColumnBounds, loadBoundsLibrary } from "./boundsChecker";
+import { checkColumnBounds, loadBoundsLibrary, normalizeBoundsUnit } from "./boundsChecker";
 
 function col(name: string, extra: Partial<SchemaColumn> = {}): SchemaColumn {
   return {
@@ -64,5 +64,25 @@ describe("boundsChecker", () => {
     expect(result?.conceptId).toBe("creatinine");
     expect(result?.matchedBy).toBe("alias_exact");
     expect(result?.violations).toEqual([]);
+  });
+
+  it("suppresses declared-unit mismatches while retaining unit-normalized matches (D98)", () => {
+    const plateletValues = Array.from({ length: 299 }, () => 263000);
+    expect(checkColumnBounds(col("platelets", { units: "platelets/µL" }), plateletValues, adult!, "metric")).toBeNull();
+    expect(checkColumnBounds(col("platelets"), plateletValues, adult!, "metric")?.violations).toHaveLength(299);
+    expect(checkColumnBounds(col("serum_creatinine", { units: "mg/dL" }), [0.8], adult!, "metric")).toBeNull();
+    expect(checkColumnBounds(col("age", { units: "years" }), [999], adult!, "metric")?.violations).toEqual([{ value: 999, rowIndex: 0 }]);
+    expect(normalizeBoundsUnit("µmol/L")).toBe(normalizeBoundsUnit("umol/L"));
+    expect(normalizeBoundsUnit("uMol/l")).toBe(normalizeBoundsUnit("umol/L"));
+  });
+
+  it("rejects fuzzy matches with meaningful unaccounted tokens but retains qualifiers (D98)", () => {
+    expect(checkColumnBounds(col("creatinine_phosphokinase"), [999], adult!, "metric")).toBeNull();
+    expect(checkColumnBounds(col("patient_nbr"), [999], adult!, "metric")).toBeNull();
+    for (const name of ["Creatinine_T0", "Creatinine_T1", "Albumin_T0", "Glucose_T0", "hba1c_percent", "creatinine_mg_dl"]) {
+      expect(checkColumnBounds(col(name), [999], adult!, "metric")).not.toBeNull();
+    }
+    expect(checkColumnBounds(col("platelets"), [263000], adult!, "metric")?.matchedBy).toBe("alias_exact");
+    expect(checkColumnBounds(col("anything", { boundsConceptId: "platelet_count" }), [263000], adult!, "metric")?.matchedBy).toBe("dictionary_tag");
   });
 });

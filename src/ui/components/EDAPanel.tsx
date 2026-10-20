@@ -3,10 +3,13 @@ import type { AnalysisPlan, DataFrame, Schema, UserOverrides } from "../../core/
 import { computeSchemaFingerprint, type EDAResults } from "../../core/eda/types";
 import { buildCorrelationSpec, buildMissingnessSpec } from "../../core/eda/edaSpecBuilders";
 import { getEffectiveJournalSettings } from "../../core/format/getEffectiveJournalSettings";
+import { getColumnDiagnosticLabel } from "../../core/format/columnLabel";
 import { useStore } from "../../store";
 import { pyodideClient } from "../../workers/pyodide.client";
 import DecisionExplainer from "./DecisionExplainer";
 import { VegaPlot } from "./VegaPlot";
+import { useEngineReady } from "../layout/useEngineReady";
+import { useToast } from "../layout/Toast";
 
 const HIGH_MISSING_FRACTION = 0.20;
 
@@ -56,10 +59,16 @@ export function EDAPanel({
   userOverrides,
   onGenerate,
 }: EDAPanelProps) {
+  const diagnosticLabel = (name: string, fallback: string) =>
+    getColumnDiagnosticLabel(schema?.columns.find((column) => column.name === name)) || fallback;
   const [expanded, setExpanded] = useState(true);
   const [isComputing, setIsComputing] = useState(false);
   const [isBivariateComputing, setIsBivariateComputing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const edaTabs = ["Missingness", "Correlations", "Multicollinearity", "Categorical Associations", "Bivariate Plots"];
+  const [selectedTab, setSelectedTab] = useState(0);
+  const engine = useEngineReady();
+  const toast = useToast();
   const draftGroupingVariable = useStore((state) => state.draftGroupingVariable);
   const setDraftGroupingVariable = useStore((state) => state.setDraftGroupingVariable);
 
@@ -112,6 +121,7 @@ export function EDAPanel({
             selectedGroupingVariable,
           );
       setEdaResults(result);
+      toast("EDA generated");
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -154,6 +164,9 @@ export function EDAPanel({
 
       {expanded && (
         <div className="p-4 border-t border-gray-200 space-y-5">
+          <div role="tablist" aria-label="EDA views" className="flex gap-1 overflow-x-auto border-b border-gray-200">
+            {edaTabs.map((tab, index) => <button key={tab} type="button" role="tab" aria-selected={selectedTab === index} tabIndex={selectedTab === index ? 0 : -1} onClick={() => setSelectedTab(index)} onKeyDown={(event) => { if (event.key === "ArrowRight" || event.key === "ArrowLeft") { event.preventDefault(); const next = (index + (event.key === "ArrowRight" ? 1 : edaTabs.length - 1)) % edaTabs.length; setSelectedTab(next); (event.currentTarget.parentElement?.children[next] as HTMLElement | undefined)?.focus(); } }} className={`-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-[13px] ${selectedTab === index ? "border-blue-600 font-semibold text-blue-600" : "border-transparent text-gray-600"}`}>{tab}</button>)}
+          </div>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm text-gray-600">
               Generate exploratory missingness, correlation, and grouping-variable plots for the active variable types.
@@ -161,13 +174,16 @@ export function EDAPanel({
             <button
               type="button"
               onClick={handleGenerateEDA}
-              disabled={!canGenerate || isComputing}
+              disabled={!canGenerate || isComputing || engine.state !== "ready"}
+              title={engine.state === "error" ? "The analysis engine failed to start. Retry from the sidebar." : engine.state !== "ready" ? "Waiting for the analysis engine to finish starting…" : undefined}
+              aria-describedby={engine.state === "ready" ? undefined : "eda-engine-status"}
               className="px-4 py-2 rounded bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
             >
               {isComputing ? "Computing..." : edaResults ? "Regenerate EDA" : "Generate EDA"}
             </button>
           </div>
 
+          {engine.state !== "ready" && <div id="eda-engine-status" className="sr-only">{engine.state === "error" ? "The analysis engine failed to start. Retry from the sidebar." : "Waiting for the analysis engine to finish starting…"}</div>}
           {!canGenerate && <div className="text-sm text-gray-500">Upload a file to enable EDA.</div>}
           {error && <div className="p-3 rounded border border-red-200 bg-red-50 text-sm text-red-700">{error}</div>}
           {isStale && (
@@ -193,7 +209,7 @@ export function EDAPanel({
                     {highMissingVars.length > 0 && (
                       <ul className="space-y-1 text-sm text-amber-800">
                         {highMissingVars.map((item) => {
-                          const label = item.displayLabel ?? item.name;
+                          const label = diagnosticLabel(item.name, item.displayLabel ?? item.name);
                           const pct = item.missingPct.toFixed(1);
                           const observed = (100 - item.missingPct).toFixed(1);
                           const moreThanHalf = item.missingPct >= 50;
@@ -315,7 +331,7 @@ export function EDAPanel({
                           <tbody>
                             {edaResults.vif.map((row) => (
                               <tr key={row.variable} className="border-b border-gray-100">
-                                <td className="py-2 pr-4 text-gray-900">{row.displayLabel}</td>
+                                <td className="py-2 pr-4 text-gray-900">{diagnosticLabel(row.variable, row.displayLabel)}</td>
                                 <td className="py-2 pr-4 text-gray-700">{row.vif === null ? "Infinity" : row.vif.toFixed(2)}</td>
                                 <td className="py-2 pr-4">
                                   <span className={
@@ -382,7 +398,7 @@ export function EDAPanel({
                         </option>
                         {groupingCandidates.map((column) => (
                           <option key={column.name} value={column.name}>
-                            {column.displayLabel ?? column.label ?? column.name}
+                            {getColumnDiagnosticLabel(column)}
                           </option>
                         ))}
                       </select>
@@ -417,10 +433,10 @@ export function EDAPanel({
                       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                         {edaResults.bivariate.plots.map((plot) => (
                           <div key={plot.variable} className="border border-gray-200 rounded-lg p-3">
-                            <div className="text-sm font-semibold text-gray-800 mb-2">{plot.displayLabel}</div>
+                            <div className="text-sm font-semibold text-gray-800 mb-2">{diagnosticLabel(plot.variable, plot.displayLabel)}</div>
                             <img
                               src={`data:image/png;base64,${plot.png}`}
-                              alt={`${plot.displayLabel} bivariate plot`}
+                              alt={`${diagnosticLabel(plot.variable, plot.displayLabel)} bivariate plot`}
                               className="max-h-44 w-full object-contain"
                             />
                           </div>

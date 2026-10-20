@@ -7,6 +7,7 @@ import { useStore } from "../../store";
 import { getDecisionBody } from "../../core/education/educationContent";
 
 const computeEDAMock = vi.hoisted(() => vi.fn());
+const isReadyMock = vi.hoisted(() => vi.fn(async () => true));
 
 vi.mock("./VegaPlot", () => ({
   VegaPlot: ({ spec }: { spec: Record<string, any> }) => (
@@ -17,6 +18,8 @@ vi.mock("./VegaPlot", () => ({
 vi.mock("../../workers/pyodide.client", () => ({
   pyodideClient: {
     computeEDA: computeEDAMock,
+    isReady: isReadyMock,
+    restart: vi.fn(async () => true),
   },
 }));
 
@@ -86,6 +89,7 @@ function renderExpanded(results: EDAResults | null = mockResults, overrides: Par
 describe("EDAPanel", () => {
   beforeEach(() => {
     computeEDAMock.mockReset();
+    isReadyMock.mockReset().mockResolvedValue(true);
     useStore.setState({ draftGroupingVariable: null, edaResults: null });
   });
 
@@ -95,13 +99,31 @@ describe("EDAPanel", () => {
     expect(screen.queryByText("Expand")).toBeNull();
   });
 
+  it("keeps Generate EDA disabled until the engine is ready", async () => {
+    let resolveReady!: (value: boolean) => void;
+    isReadyMock.mockReturnValueOnce(new Promise<boolean>((resolve) => { resolveReady = resolve; }));
+    renderExpanded(null);
+    const button = screen.getByRole("button", { name: "Generate EDA" }) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    resolveReady(true);
+    await waitFor(() => expect(button.disabled).toBe(false));
+  });
+
+  it("moves EDA tab focus with the arrow keys", () => {
+    renderExpanded();
+    const firstTab = screen.getByRole("tab", { name: "Missingness" });
+    fireEvent.keyDown(firstTab, { key: "ArrowRight" });
+    expect(screen.getByRole("tab", { name: "Correlations" }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByRole("tab", { name: "Missingness" }).getAttribute("aria-selected")).toBe("false");
+  });
+
   it("renders missingness, flagged pairs, and bivariate placeholder from results", () => {
     renderExpanded();
     expect(screen.getAllByTestId("mock-vega-plot").length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText(/A and B: r = 0.82/)).toBeDefined();
     expect(screen.getByText(/B and A: r = 0.91/)).toBeDefined();
-    expect(screen.getByText("Multicollinearity")).toBeDefined();
-    expect(screen.getByText("Categorical Associations")).toBeDefined();
+    expect(screen.getByRole("tab", { name: "Multicollinearity" })).toBeDefined();
+    expect(screen.getByRole("tab", { name: "Categorical Associations" })).toBeDefined();
     expect(screen.getByLabelText("Grouping variable")).toBeDefined();
     expect(screen.getByText("This selection carries forward to Stage 6.")).toBeDefined();
   });
@@ -111,11 +133,11 @@ describe("EDAPanel", () => {
     expect(screen.getByTestId("decision-explainer-qa.eda-mcar")).toBeDefined();
     expect(screen.getByTestId("decision-explainer-qa.eda-correlation")).toBeDefined();
 
-    fireEvent.click(screen.getByText("Multicollinearity"));
+    fireEvent.click(screen.getByRole("button", { name: /^Multicollinearity/ }));
     expect(screen.getByTestId("decision-explainer-qa.eda-vif")).toBeDefined();
     expect(screen.queryByText(/VIF measures how much a predictor is explained by the others/)).toBeNull();
 
-    fireEvent.click(screen.getByText("Categorical Associations"));
+    fireEvent.click(screen.getByRole("button", { name: /^Categorical Associations/ }));
     expect(screen.getByTestId("decision-explainer-qa.eda-mosaic")).toBeDefined();
 
     expect(getDecisionBody("qa.eda-mcar", "concise").what).toContain("Experimental: R parity validation was not available");
@@ -144,12 +166,13 @@ describe("EDAPanel", () => {
       },
     });
     expect(screen.getByText("Bivariate distributions by Group")).toBeDefined();
-    expect(screen.getByAltText("A bivariate plot")).toBeDefined();
+    expect(screen.getByAltText("A (a) bivariate plot")).toBeDefined();
   });
 
   it("fires generation callback and shows loading state", async () => {
     const onGenerate = vi.fn(async () => mockResults);
     const { setEdaResults } = renderExpanded(null, { onGenerate });
+    await waitFor(() => expect(screen.getByRole("button", { name: "Generate EDA" })).toHaveProperty("disabled", false));
     fireEvent.click(screen.getByText("Generate EDA"));
     expect(screen.getByText("Computing...")).toBeDefined();
     await waitFor(() => expect(onGenerate).toHaveBeenCalled());
@@ -160,7 +183,7 @@ describe("EDAPanel", () => {
     renderExpanded();
     const select = screen.getByLabelText("Grouping variable") as HTMLSelectElement;
     expect(select.value).toBe("");
-    expect(screen.getByRole("option", { name: "Group" })).toBeDefined();
+    expect(screen.getByRole("option", { name: "Group (group)" })).toBeDefined();
   });
 
   it("shows the no-categorical note and hides the dropdown when no candidates exist", () => {
@@ -189,7 +212,7 @@ describe("EDAPanel", () => {
       },
     });
 
-    expect(screen.queryByRole("option", { name: "Group" })).toBeNull();
+    expect(screen.queryByRole("option", { name: "Group (group)" })).toBeNull();
     expect(screen.queryByLabelText("Grouping variable")).toBeNull();
   });
 
@@ -226,6 +249,7 @@ describe("EDAPanel", () => {
     computeEDAMock.mockResolvedValue(mockResults);
     renderExpanded(null);
 
+    await waitFor(() => expect(screen.getByRole("button", { name: "Generate EDA" })).toHaveProperty("disabled", false));
     fireEvent.click(screen.getByText("Generate EDA"));
 
     await waitFor(() => expect(computeEDAMock).toHaveBeenCalledWith(data, schema, expect.any(Object), "group"));

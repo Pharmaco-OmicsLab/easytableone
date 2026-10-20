@@ -1,0 +1,4 @@
+R version
+R version 4.6.0 (2026-04-24 ucrt)
+tableone version
+0.13.2

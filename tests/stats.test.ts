@@ -11,6 +11,7 @@ import { enumerateSheets, parseXLSXSheet } from "../src/core/parser/xlsx";
 import { sha256Hex } from "../src/lib/hash";
 
 const MATERIALS_DIR = path.resolve(__dirname, "../_materials");
+const internalFixture = (name: string) => path.join(MATERIALS_DIR, "samples", name);
 
 function getFile(filename: string): File {
   const directPath = path.join(MATERIALS_DIR, filename);
@@ -67,8 +68,12 @@ function makePlan(
 // ─────────────────────────────────────────────
 describe("Statistical Engine – Smoke & Property Tests", () => {
   beforeAll(async () => {
+    const startedAt = Date.now();
     await pyodideClient.isReady();
-  }, 60000);
+    if (process.env.CI === "1") {
+      process.stderr.write(`[pyodide startup] tests/stats.test.ts isReady resolved in ${((Date.now() - startedAt) / 1000).toFixed(1)}s\n`);
+    }
+  });
 
   it("keeps ordinary ANOVA statistics while accurately warning about heteroscedasticity", async () => {
     const df = makeDF(
@@ -95,6 +100,7 @@ describe("Statistical Engine – Smoke & Property Tests", () => {
   // ─────────────────────────────────────────────
   // REAL-FIXTURE SMOKE TESTS
   // ─────────────────────────────────────────────
+  describe.skipIf(!fs.existsSync(internalFixture("babies.csv")))("internal fixture: babies.csv", () => {
   it("babies.csv: bwt by smoke → t-test or Mann-Whitney, p < 0.05", async () => {
     const df = await parseCSV(getFile("babies.csv"));
 
@@ -115,7 +121,9 @@ describe("Statistical Engine – Smoke & Property Tests", () => {
     expect(res.computeMetadata.libVersions).toHaveProperty("scipy");
     expect(res.computeMetadata.libVersions).toHaveProperty("numpy");
   });
+  });
 
+  describe.skipIf(!fs.existsSync(internalFixture("stroke_risk_dataset_v2.csv")))("internal fixture: stroke_risk_dataset_v2.csv", () => {
   it("stroke_risk: stroke_risk_percentage by at_risk → Mann-Whitney (n > 2000)", async () => {
     const df = await parseCSV(getFile("stroke_risk_dataset_v2.csv"));
     const hasAtRisk = df.columns.some((c) => c.name === "at_risk");
@@ -137,6 +145,7 @@ describe("Statistical Engine – Smoke & Property Tests", () => {
     // n_min > 2000 → skewness/kurtosis path → Mann-Whitney expected for a multi-modal dist
     expect(v.test.name).toBe("Mann-Whitney U");
   }, 15000);
+  });
 
   // ─────────────────────────────────────────────
   // PROPERTY / EDGE-CASE TESTS  (PLAN §10.1)
@@ -495,11 +504,12 @@ tuple(res.shape)
     expect(res3.computeMetadata.seed).not.toBe(seed1);
   });
 
+  describe.skipIf(!fs.existsSync(internalFixture("250409_fungi_dataplus_master_file.xlsx")))("internal fixture: 250409_fungi_dataplus_master_file.xlsx", () => {
   it("Round 9.1: running the fungi fixture with no user-supplied seed produces analysisPlan.randomSeed !== 42", async () => {
     const file = getFile("250409_fungi_dataplus_master_file.xlsx");
     const { workbook } = await enumerateSheets(file);
     const df = parseXLSXSheet(workbook, "250207_SO_LIEU_BAI_BAO_201_MAU", 0);
-    
+
     const plan = makePlan("c9.1", ["d2", "gender"], {
       d2: { label: "d2", treatAs: "categorical_nominal", missingness: "drop_row" },
       gender: { label: "Gender", treatAs: "categorical_nominal", missingness: "drop_row" },
@@ -528,15 +538,16 @@ tuple(res.shape)
 
     expect(seed).toBe(expectedSeed);
   });
+  });
 
   it("Round 9.1: two different datasets produce two different seeds", async () => {
     const df1 = makeDF(["group", "val"], [[0, "A"], [0, "B"], [1, "C"], [1, "D"]]);
     const df2 = makeDF(["group", "val"], [[0, "A"], [0, "B"], [2, "C"], [2, "D"]]);
     const plan = makePlan("group", ["val"], { val: { label: "Val", treatAs: "categorical_nominal" } });
-    
+
     const res1 = await runTable1(df1, plan);
     const res2 = await runTable1(df2, plan);
-    
+
     expect(res1.computeMetadata.seed).not.toBe(res2.computeMetadata.seed);
   });
 
@@ -711,6 +722,27 @@ tuple(res.shape)
 
     const warningText = `Some expected cell counts are < 5; the chi-square approximation is unreliable, so Fisher's exact test is recommended.`;
     expect(warningText).toBe("Some expected cell counts are < 5; the chi-square approximation is unreliable, so Fisher's exact test is recommended.");
+  });
+
+  it("omits an infinite Fisher odds ratio so separated tables remain valid JSON", async () => {
+    const df = makeDF(
+      ["group", "outcome"],
+      [
+        ["control", "no"], ["control", "no"],
+        ["treatment", "yes"], ["treatment", "yes"],
+      ],
+    );
+    const plan = makePlan("group", ["outcome"], {
+      outcome: { label: "Outcome", treatAs: "categorical_nominal" },
+    });
+
+    const results = await runTable1(df, plan);
+    expect(results.perVariable[0].test.name).toBe("Fisher's exact");
+    expect(results.perVariable[0].test.auxiliary?.oddsRatio).toBeUndefined();
+
+    const recomputed = await recomputeVariable(df, plan, results, "outcome", "fishers_exact");
+    expect(recomputed.test.name).toBe("Fisher's exact");
+    expect(recomputed.test.auxiliary?.oddsRatio).toBeUndefined();
   });
 
   it("Round 11: reproducibility.json testOverrides serialization matches schema", async () => {
@@ -969,7 +1001,7 @@ tuple(res.shape)
       { randomSeed: 12345 }
     );
     const results = await runTable1(df, plan);
-    
+
     const pvals = [];
     for (let i = 0; i < 5; i++) {
       const recomputed = await recomputeVariable(df, plan, results, "cat3", "fishers_exact");
@@ -984,7 +1016,7 @@ tuple(res.shape)
     const df = makeDF(["group", "val"], [[0, 1], [1, 2]]);
     const plan = makePlan("group", ["val"], { val: { label: "Val", treatAs: "continuous" } });
     const results = await runTable1(df, plan);
-    
+
     spy.mockClear();
     await recomputeVariable(df, plan, results, "val", "welch_t_test");
     expect(spy).toHaveBeenCalledTimes(1);
@@ -1173,7 +1205,7 @@ tuple(res.shape)
       plan,
       schema: { columns: [] } as any,
       results: result,
-      formattedTable: { journal: "Example", rulesetVersion: "1.0" } as any,
+      formattedTable: { journal: "NEJM", rulesetVersion: "1.0" } as any,
       appVersion: "test",
       timestamp: "2026-07-07T00:00:00.000Z",
     }));
@@ -1266,5 +1298,440 @@ pairwise_tukeyhsd = _phase33_orig_tukey
 del _phase33_orig_tukey
 `]);
     }
+  }, 60000);
+
+  it("Phase 50 R3 Step 1: Tukey post-hoc carries unequal-variance caveat when Levene p < 0.05", async () => {
+    // 3 groups, normal distributions with different means and distinct variances (heteroscedastic)
+    const heteroscedasticRows: (string | number)[][] = [
+      ...[-0.1, -0.05, 0, 0.05, 0.1, -0.08, 0.08, 0.02].map((v) => ["A", v]),
+      ...[3.5, 4.2, 5.0, 5.8, 6.5, 4.0, 5.5, 6.0].map((v) => ["B", v]),
+      ...[5.0, 9.0, 15.0, 21.0, 25.0, 11.0, 19.0, 13.0].map((v) => ["C", v]),
+    ];
+    const dfHetero = makeDF(["group", "val"], heteroscedasticRows);
+    const planHetero = makePlan(
+      "group",
+      ["val"],
+      { val: { label: "Val", treatAs: "continuous", missingness: "drop_row" } },
+      { testOverrides: [{ variable: "val", method: "oneway_anova", timestamp: "2026-09-28T00:00:00.000Z" }] },
+    );
+    const resultHetero = await runTable1(dfHetero, planHetero);
+    const varHetero = resultHetero.perVariable[0];
+    expect(varHetero.test.name).toBe("ANOVA");
+    expect(varHetero.test.pValue!).toBeLessThan(0.05);
+    expect(varHetero.test.auxiliary?.levenePValue).toBeLessThan(0.05);
+    expect(varHetero.postHoc?.method).toBe("tukey_hsd");
+    expect(varHetero.postHoc?.pairs.length).toBe(3);
+    expect(varHetero.postHoc?.caveat).toBe(
+      "Tukey HSD assumes equal variances, which the Levene/Brown-Forsythe check did not support for this variable; pairwise P values should be interpreted with caution.",
+    );
+
+    // 3 groups, normal distributions with identical variances (homoscedastic)
+    const homoscedasticRows: (string | number)[][] = [
+      ...[0, 1, 2, 3, 4, 1.5, 2.5, 3.5].map((v) => ["A", v]),
+      ...[10, 11, 12, 13, 14, 11.5, 12.5, 13.5].map((v) => ["B", v]),
+      ...[20, 21, 22, 23, 24, 21.5, 22.5, 23.5].map((v) => ["C", v]),
+    ];
+    const dfHomo = makeDF(["group", "val"], homoscedasticRows);
+    const planHomo = makePlan(
+      "group",
+      ["val"],
+      { val: { label: "Val", treatAs: "continuous", missingness: "drop_row" } },
+      { testOverrides: [{ variable: "val", method: "oneway_anova", timestamp: "2026-09-28T00:00:00.000Z" }] },
+    );
+    const resultHomo = await runTable1(dfHomo, planHomo);
+    const varHomo = resultHomo.perVariable[0];
+    expect(varHomo.test.name).toBe("ANOVA");
+    expect(varHomo.test.pValue!).toBeLessThan(0.05);
+    expect(varHomo.test.auxiliary?.levenePValue).toBeGreaterThanOrEqual(0.05);
+    expect(varHomo.postHoc?.method).toBe("tukey_hsd");
+    expect(varHomo.postHoc?.pairs.length).toBe(3);
+    expect(varHomo.postHoc?.caveat).toBeUndefined();
+  }, 60000);
+
+  it("Phase 50 R3 Step 2: contradictionReason returned on both runTable1 and recomputeVariable", async () => {
+    // 1. unequal_variance: normal continuous data with heteroscedasticity overridden to ANOVA
+    const heteroRows: (string | number)[][] = [
+      ...[-0.1, -0.05, 0, 0.05, 0.1, -0.08, 0.08, 0.02].map((v) => ["A", v]),
+      ...[3.5, 4.2, 5.0, 5.8, 6.5, 4.0, 5.5, 6.0].map((v) => ["B", v]),
+      ...[5.0, 9.0, 15.0, 21.0, 25.0, 11.0, 19.0, 13.0].map((v) => ["C", v]),
+    ];
+    const dfHetero = makeDF(["group", "val"], heteroRows);
+    const planHetero = makePlan(
+      "group",
+      ["val"],
+      { val: { label: "Val", treatAs: "continuous", missingness: "drop_row" } },
+      { testOverrides: [{ variable: "val", method: "oneway_anova", timestamp: "2026-09-28T00:00:00.000Z" }] },
+    );
+    const resultHetero = await runTable1(dfHetero, planHetero);
+    expect(resultHetero.perVariable[0].test.auxiliary?.assumptionCheckContradicted).toBe("true");
+    expect(resultHetero.perVariable[0].test.auxiliary?.contradictionReason).toBe("unequal_variance");
+
+    // Recompute path verification (Risk register R1)
+    const recomputedHetero = await recomputeVariable(dfHetero, planHetero, resultHetero, "val", "oneway_anova");
+    expect(recomputedHetero.test.auxiliary?.assumptionCheckContradicted).toBe("true");
+    expect(recomputedHetero.test.auxiliary?.contradictionReason).toBe("unequal_variance");
+    expect(recomputedHetero.postHoc?.caveat).toBeDefined();
+
+    // 2. non_normality: non-normal continuous data overridden to parametric test
+    const nonNormRows: (string | number)[][] = [
+      ...[1, 1, 1, 1, 1, 1, 1, 100].map((v) => ["A", v]),
+      ...[2, 2, 2, 2, 2, 2, 2, 200].map((v) => ["B", v]),
+    ];
+    const dfNonNorm = makeDF(["group", "val"], nonNormRows);
+    const planNonNorm = makePlan(
+      "group",
+      ["val"],
+      { val: { label: "Val", treatAs: "continuous", missingness: "drop_row" } },
+      { testOverrides: [{ variable: "val", method: "welch_t_test", timestamp: "2026-09-28T00:00:00.000Z" }] },
+    );
+    const resultNonNorm = await runTable1(dfNonNorm, planNonNorm);
+    expect(resultNonNorm.perVariable[0].test.auxiliary?.assumptionCheckContradicted).toBe("true");
+    expect(resultNonNorm.perVariable[0].test.auxiliary?.contradictionReason).toBe("non_normality");
+
+    const recomputedNonNorm = await recomputeVariable(dfNonNorm, planNonNorm, resultNonNorm, "val", "welch_t_test");
+    expect(recomputedNonNorm.test.auxiliary?.assumptionCheckContradicted).toBe("true");
+    expect(recomputedNonNorm.test.auxiliary?.contradictionReason).toBe("non_normality");
+
+    // 3. low_expected_count: categorical data with min expected < 5 overridden to chi-square
+    const catRows: (string | number)[][] = [
+      ["A", "cat1"], ["A", "cat1"], ["A", "cat1"], ["A", "cat1"], ["A", "cat2"],
+      ["B", "cat1"], ["B", "cat2"], ["B", "cat2"], ["B", "cat2"], ["B", "cat2"],
+    ];
+    const dfCat = makeDF(["group", "cat"], catRows);
+    const planCat = makePlan(
+      "group",
+      ["cat"],
+      { cat: { label: "Cat", treatAs: "categorical_nominal", missingness: "drop_row" } },
+      { testOverrides: [{ variable: "cat", method: "chi_square", timestamp: "2026-09-28T00:00:00.000Z" }] },
+    );
+    const resultCat = await runTable1(dfCat, planCat);
+    expect(resultCat.perVariable[0].test.auxiliary?.assumptionCheckContradicted).toBe("true");
+    expect(resultCat.perVariable[0].test.auxiliary?.contradictionReason).toBe("low_expected_count");
+
+    const recomputedCat = await recomputeVariable(dfCat, planCat, resultCat, "cat", "chi_square");
+    expect(recomputedCat.test.auxiliary?.assumptionCheckContradicted).toBe("true");
+    expect(recomputedCat.test.auxiliary?.contradictionReason).toBe("low_expected_count");
+  }, 60000);
+
+  it("Phase 50 R3 Step 4: Yates note emitted only when dof == 1", async () => {
+    // 2x2 table: dof = (2-1)*(2-1) = 1 → Yates applied and note present
+    const rows2x2: (string | number)[][] = [
+      ...Array(20).fill(["A", "yes"]),
+      ...Array(30).fill(["A", "no"]),
+      ...Array(40).fill(["B", "yes"]),
+      ...Array(10).fill(["B", "no"]),
+    ];
+    const df2x2 = makeDF(["group", "status"], rows2x2);
+    const plan2x2 = makePlan(
+      "group",
+      ["status"],
+      { status: { label: "Status", treatAs: "categorical_nominal", missingness: "drop_row", chiSquareYatesCorrection: true } },
+    );
+    const result2x2 = await runTable1(df2x2, plan2x2);
+    expect(result2x2.perVariable[0].notes).toContain("Yates' continuity correction applied.");
+
+    const recomputed2x2 = await recomputeVariable(df2x2, plan2x2, result2x2, "status");
+    expect(recomputed2x2.notes).toContain("Yates' continuity correction applied.");
+
+    // 3x2 table: dof = (3-1)*(2-1) = 2 → Yates not applied, note absent, P identical to uncorrected
+    const rows3x2: (string | number)[][] = [
+      ...Array(20).fill(["A", "yes"]),
+      ...Array(30).fill(["A", "no"]),
+      ...Array(40).fill(["B", "yes"]),
+      ...Array(10).fill(["B", "no"]),
+      ...Array(25).fill(["C", "yes"]),
+      ...Array(25).fill(["C", "no"]),
+    ];
+    const df3x2 = makeDF(["group", "status"], rows3x2);
+    const plan3x2Yates = makePlan(
+      "group",
+      ["status"],
+      { status: { label: "Status", treatAs: "categorical_nominal", missingness: "drop_row", chiSquareYatesCorrection: true } },
+    );
+    const plan3x2NoYates = makePlan(
+      "group",
+      ["status"],
+      { status: { label: "Status", treatAs: "categorical_nominal", missingness: "drop_row", chiSquareYatesCorrection: false } },
+    );
+
+    const result3x2Yates = await runTable1(df3x2, plan3x2Yates);
+    const result3x2NoYates = await runTable1(df3x2, plan3x2NoYates);
+
+    expect(result3x2Yates.perVariable[0].notes).not.toContain("Yates' continuity correction applied.");
+    expect(result3x2Yates.perVariable[0].test.pValue).toBe(result3x2NoYates.perVariable[0].test.pValue);
+
+    const recomputed3x2Yates = await recomputeVariable(df3x2, plan3x2Yates, result3x2Yates, "status");
+    expect(recomputed3x2Yates.notes).not.toContain("Yates' continuity correction applied.");
+  }, 60000);
+
+  it("Phase 50 R4: ordinal rank test for ordered categories (D104(b))", async () => {
+    // 1. 2 groups: NYHA 1-4 with ordinal_rank override
+    const rows2: (string | number)[][] = [
+      ...Array(20).fill(["A", 1]),
+      ...Array(15).fill(["A", 2]),
+      ...Array(10).fill(["A", 3]),
+      ...Array(5).fill(["A", 4]),
+      ...Array(5).fill(["B", 1]),
+      ...Array(10).fill(["B", 2]),
+      ...Array(15).fill(["B", 3]),
+      ...Array(20).fill(["B", 4]),
+    ];
+    const df2 = makeDF(["group", "nyha"], rows2);
+    const defaultPlan2 = makePlan(
+      "group",
+      ["nyha"],
+      { nyha: { label: "NYHA", treatAs: "categorical_ordinal", missingness: "drop_row", levelOrder: [1, 2, 3, 4] } },
+    );
+    const overridePlan2 = makePlan(
+      "group",
+      ["nyha"],
+      { nyha: { label: "NYHA", treatAs: "categorical_ordinal", missingness: "drop_row", levelOrder: [1, 2, 3, 4] } },
+      { testOverrides: [{ variable: "nyha", method: "ordinal_rank", timestamp: "2026-09-28T00:00:00.000Z" }] },
+    );
+
+    const defaultRes = await runTable1(df2, defaultPlan2);
+    const overrideRes = await runTable1(df2, overridePlan2);
+
+    expect(overrideRes.perVariable[0].test.name).toBe("Mann-Whitney U (ordinal)");
+    // Counts, percentages, and SMD identical
+    expect(overrideRes.perVariable[0].summaryByGroup).toEqual(defaultRes.perVariable[0].summaryByGroup);
+    expect(overrideRes.perVariable[0].overallSummary).toEqual(defaultRes.perVariable[0].overallSummary);
+    expect(overrideRes.perVariable[0].smd).toBe(defaultRes.perVariable[0].smd);
+
+    // P value equals scipy.stats.mannwhitneyu on hand-mapped ranks (0..3)
+    const pyCheck = await pyodideClient.call("run_python", [`
+import scipy.stats as stats
+import json
+gA = [0.0]*20 + [1.0]*15 + [2.0]*10 + [3.0]*5
+gB = [0.0]*5 + [1.0]*10 + [2.0]*15 + [3.0]*20
+res = stats.mannwhitneyu(gA, gB, alternative='two-sided')
+json.dumps({'statistic': float(res.statistic), 'pValue': float(res.pvalue)})
+    `]);
+    const expectedU = JSON.parse(pyCheck as string);
+    expect(overrideRes.perVariable[0].test.statistic).toBeCloseTo(expectedU.statistic, 4);
+    expect(overrideRes.perVariable[0].test.pValue).toBeCloseTo(expectedU.pValue, 4);
+
+    const recomputed2 = await recomputeVariable(df2, overridePlan2, overrideRes, "nyha", "ordinal_rank");
+    expect(recomputed2.test.name).toBe("Mann-Whitney U (ordinal)");
+    expect(recomputed2.test.statistic).toBe(overrideRes.perVariable[0].test.statistic);
+    expect(recomputed2.test.pValue).toBe(overrideRes.perVariable[0].test.pValue);
+
+    // 2. 3 groups with Kruskal-Wallis (ordinal) plus Dunn post-hoc
+    const rows3: (string | number)[][] = [
+      ...Array(30).fill(["A", 1]),
+      ...Array(5).fill(["A", 2]),
+      ...Array(2).fill(["A", 3]),
+      ...Array(5).fill(["B", 1]),
+      ...Array(25).fill(["B", 2]),
+      ...Array(5).fill(["B", 3]),
+      ...Array(2).fill(["C", 1]),
+      ...Array(5).fill(["C", 2]),
+      ...Array(30).fill(["C", 3]),
+    ];
+    const df3 = makeDF(["group", "stage"], rows3);
+    const plan3 = makePlan(
+      "group",
+      ["stage"],
+      { stage: { label: "Stage", treatAs: "categorical_ordinal", missingness: "drop_row", levelOrder: [1, 2, 3] } },
+      { testOverrides: [{ variable: "stage", method: "ordinal_rank", timestamp: "2026-09-28T00:00:00.000Z" }] },
+    );
+    const res3 = await runTable1(df3, plan3);
+    expect(res3.perVariable[0].test.name).toBe("Kruskal-Wallis (ordinal)");
+    expect(res3.perVariable[0].test.pValue).toBeLessThan(0.001);
+    expect(res3.perVariable[0].postHoc).toBeDefined();
+    expect(res3.perVariable[0].postHoc?.method).toBe("dunn");
+    expect(res3.perVariable[0].postHoc?.correction).toBe("holm");
+    expect(res3.perVariable[0].postHoc?.pairs.length).toBe(3);
+
+    const recomputed3 = await recomputeVariable(df3, plan3, res3, "stage", "ordinal_rank");
+    expect(recomputed3.test.name).toBe("Kruskal-Wallis (ordinal)");
+    expect(recomputed3.postHoc).toBeDefined();
+    expect(recomputed3.postHoc?.method).toBe("dunn");
+
+    // 3. Override on a nominal variable -> default test plus note
+    const dfNominal = makeDF(["group", "nominal"], [
+      ...Array(50).fill(["A", "red"]), ...Array(50).fill(["A", "blue"]), ...Array(50).fill(["A", "green"]),
+      ...Array(50).fill(["B", "red"]), ...Array(50).fill(["B", "blue"]), ...Array(50).fill(["B", "green"]),
+    ]);
+    const planNominal = makePlan(
+      "group",
+      ["nominal"],
+      { nominal: { label: "Nominal", treatAs: "categorical_nominal", missingness: "drop_row" } },
+      { testOverrides: [{ variable: "nominal", method: "ordinal_rank", timestamp: "2026-09-28T00:00:00.000Z" }] },
+    );
+    const resNominal = await runTable1(dfNominal, planNominal);
+    expect(resNominal.perVariable[0].test.name).toBe("Chi-square");
+    expect(resNominal.perVariable[0].notes).toContain(
+      "Ordinal rank test requires an ordered categorical variable with at least 3 levels; the default test was used."
+    );
+
+    const recomputedNominal = await recomputeVariable(dfNominal, planNominal, resNominal, "nominal", "ordinal_rank");
+    expect(recomputedNominal.test.name).toBe("Chi-square");
+    expect(recomputedNominal.notes).toContain(
+      "Ordinal rank test requires an ordered categorical variable with at least 3 levels; the default test was used."
+    );
+
+    // 4. Value outside levelOrder -> exclusion note
+    const rowsOutside: (string | number)[][] = [
+      ...Array(20).fill(["A", 1]),
+      ...Array(15).fill(["A", 2]),
+      ...Array(10).fill(["A", 3]),
+      ["A", 99],
+      ["B", 99],
+      ...Array(5).fill(["B", 1]),
+      ...Array(10).fill(["B", 2]),
+      ...Array(15).fill(["B", 3]),
+    ];
+    const dfOutside = makeDF(["group", "nyha"], rowsOutside);
+    const planOutside = makePlan(
+      "group",
+      ["nyha"],
+      { nyha: { label: "NYHA", treatAs: "categorical_ordinal", missingness: "drop_row", levelOrder: [1, 2, 3] } },
+      { testOverrides: [{ variable: "nyha", method: "ordinal_rank", timestamp: "2026-09-28T00:00:00.000Z" }] },
+    );
+    const resOutside = await runTable1(dfOutside, planOutside);
+    expect(resOutside.perVariable[0].test.name).toBe("Mann-Whitney U (ordinal)");
+    expect(resOutside.perVariable[0].notes).toContain(
+      "2 value(s) not in the declared level order were excluded from the rank test."
+    );
+
+    const recomputedOutside = await recomputeVariable(dfOutside, planOutside, resOutside, "nyha", "ordinal_rank");
+    expect(recomputedOutside.notes).toContain(
+      "2 value(s) not in the declared level order were excluded from the rank test."
+    );
+  }, 60000);
+
+  it("Phase 50 R5: ordinal rank test handles missing values, text codes, and unlisted codes (D104(b), D107(a))", async () => {
+    // 1. 2 groups: NYHA 1-4 with one null in the column -> finite P equal to mannwhitneyu on hand-mapped ranks; no exclusion note
+    const rowsNull2: (string | number | null)[][] = [
+      ...Array(20).fill(["A", 1]),
+      ...Array(15).fill(["A", 2]),
+      ...Array(10).fill(["A", 3]),
+      ...Array(5).fill(["A", 4]),
+      ["A", null], // one null in column
+      ...Array(5).fill(["B", 1]),
+      ...Array(10).fill(["B", 2]),
+      ...Array(15).fill(["B", 3]),
+      ...Array(20).fill(["B", 4]),
+    ];
+    const dfNull2 = makeDF(["group", "nyha"], rowsNull2);
+    const planNull2 = makePlan(
+      "group",
+      ["nyha"],
+      { nyha: { label: "NYHA", treatAs: "categorical_ordinal", missingness: "drop_row", levelOrder: [1, 2, 3, 4] } },
+      { testOverrides: [{ variable: "nyha", method: "ordinal_rank", timestamp: "2026-09-28T00:00:00.000Z" }] },
+    );
+    const resNull2 = await runTable1(dfNull2, planNull2);
+    expect(resNull2.perVariable[0].test.name).toBe("Mann-Whitney U (ordinal)");
+    expect(resNull2.perVariable[0].test.pValue).not.toBeNull();
+    expect(Number.isFinite(resNull2.perVariable[0].test.pValue)).toBe(true);
+    expect(resNull2.perVariable[0].notes.some((n: string) => n.includes("excluded from the rank test"))).toBe(false);
+
+    const pyCheckNull = await pyodideClient.call("run_python", [`
+import scipy.stats as stats
+import json
+gA = [0.0]*20 + [1.0]*15 + [2.0]*10 + [3.0]*5
+gB = [0.0]*5 + [1.0]*10 + [2.0]*15 + [3.0]*20
+res = stats.mannwhitneyu(gA, gB, alternative='two-sided')
+json.dumps({'statistic': float(res.statistic), 'pValue': float(res.pvalue)})
+    `]);
+    const expNull = JSON.parse(pyCheckNull as string);
+    expect(resNull2.perVariable[0].test.statistic).toBeCloseTo(expNull.statistic, 4);
+    expect(resNull2.perVariable[0].test.pValue).toBeCloseTo(expNull.pValue, 4);
+
+    const recompNull2 = await recomputeVariable(dfNull2, planNull2, resNull2, "nyha", "ordinal_rank");
+    expect(recompNull2.test.name).toBe("Mann-Whitney U (ordinal)");
+    expect(recompNull2.test.pValue).toBeCloseTo(expNull.pValue, 4);
+    expect(recompNull2.notes.some((n: string) => n.includes("excluded from the rank test"))).toBe(false);
+
+    // 2. 3 groups with one null in the column and Kruskal-Wallis
+    const rowsNull3: (string | number | null)[][] = [
+      ...Array(30).fill(["A", 1]),
+      ...Array(5).fill(["A", 2]),
+      ...Array(2).fill(["A", 3]),
+      ["A", null],
+      ...Array(5).fill(["B", 1]),
+      ...Array(25).fill(["B", 2]),
+      ...Array(5).fill(["B", 3]),
+      ...Array(2).fill(["C", 1]),
+      ...Array(5).fill(["C", 2]),
+      ...Array(30).fill(["C", 3]),
+    ];
+    const dfNull3 = makeDF(["group", "stage"], rowsNull3);
+    const planNull3 = makePlan(
+      "group",
+      ["stage"],
+      { stage: { label: "Stage", treatAs: "categorical_ordinal", missingness: "drop_row", levelOrder: [1, 2, 3] } },
+      { testOverrides: [{ variable: "stage", method: "ordinal_rank", timestamp: "2026-09-28T00:00:00.000Z" }] },
+    );
+    const resNull3 = await runTable1(dfNull3, planNull3);
+    expect(resNull3.perVariable[0].test.name).toBe("Kruskal-Wallis (ordinal)");
+    expect(resNull3.perVariable[0].test.pValue).not.toBeNull();
+    expect(Number.isFinite(resNull3.perVariable[0].test.pValue)).toBe(true);
+    expect(resNull3.perVariable[0].notes.some((n: string) => n.includes("excluded from the rank test"))).toBe(false);
+
+    const recompNull3 = await recomputeVariable(dfNull3, planNull3, resNull3, "stage", "ordinal_rank");
+    expect(recompNull3.test.name).toBe("Kruskal-Wallis (ordinal)");
+    expect(recompNull3.test.pValue).not.toBeNull();
+    expect(Number.isFinite(recompNull3.test.pValue)).toBe(true);
+    expect(recompNull3.notes.some((n: string) => n.includes("excluded from the rank test"))).toBe(false);
+
+    // 3. Text codes "I","II","III","IV" still map
+    const rowsText: (string | number)[][] = [
+      ...Array(20).fill(["A", "I"]),
+      ...Array(15).fill(["A", "II"]),
+      ...Array(10).fill(["A", "III"]),
+      ...Array(5).fill(["A", "IV"]),
+      ...Array(5).fill(["B", "I"]),
+      ...Array(10).fill(["B", "II"]),
+      ...Array(15).fill(["B", "III"]),
+      ...Array(20).fill(["B", "IV"]),
+    ];
+    const dfText = makeDF(["group", "nyha_text"], rowsText);
+    const planText = makePlan(
+      "group",
+      ["nyha_text"],
+      { nyha_text: { label: "NYHA", treatAs: "categorical_ordinal", missingness: "drop_row", levelOrder: ["I", "II", "III", "IV"] } },
+      { testOverrides: [{ variable: "nyha_text", method: "ordinal_rank", timestamp: "2026-09-28T00:00:00.000Z" }] },
+    );
+    const resText = await runTable1(dfText, planText);
+    expect(resText.perVariable[0].test.name).toBe("Mann-Whitney U (ordinal)");
+    expect(resText.perVariable[0].test.pValue).toBeCloseTo(expNull.pValue, 4);
+    expect(resText.perVariable[0].notes.some((n: string) => n.includes("excluded from the rank test"))).toBe(false);
+
+    const recompText = await recomputeVariable(dfText, planText, resText, "nyha_text", "ordinal_rank");
+    expect(recompText.test.name).toBe("Mann-Whitney U (ordinal)");
+    expect(recompText.test.pValue).toBeCloseTo(expNull.pValue, 4);
+    expect(recompText.notes.some((n: string) => n.includes("excluded from the rank test"))).toBe(false);
+
+    // 4. A value 5 not in the order -> exclusion note with count 1
+    const rowsVal5: (string | number)[][] = [
+      ...Array(20).fill(["A", 1]),
+      ...Array(15).fill(["A", 2]),
+      ...Array(10).fill(["A", 3]),
+      ...Array(5).fill(["A", 4]),
+      ["A", 5], // 5 not in 1..4
+      ...Array(5).fill(["B", 1]),
+      ...Array(10).fill(["B", 2]),
+      ...Array(15).fill(["B", 3]),
+      ...Array(20).fill(["B", 4]),
+    ];
+    const dfVal5 = makeDF(["group", "nyha"], rowsVal5);
+    const planVal5 = makePlan(
+      "group",
+      ["nyha"],
+      { nyha: { label: "NYHA", treatAs: "categorical_ordinal", missingness: "drop_row", levelOrder: [1, 2, 3, 4] } },
+      { testOverrides: [{ variable: "nyha", method: "ordinal_rank", timestamp: "2026-09-28T00:00:00.000Z" }] },
+    );
+    const resVal5 = await runTable1(dfVal5, planVal5);
+    expect(resVal5.perVariable[0].test.name).toBe("Mann-Whitney U (ordinal)");
+    expect(resVal5.perVariable[0].notes).toContain(
+      "1 value(s) not in the declared level order were excluded from the rank test."
+    );
+
+    const recompVal5 = await recomputeVariable(dfVal5, planVal5, resVal5, "nyha", "ordinal_rank");
+    expect(recompVal5.notes).toContain(
+      "1 value(s) not in the declared level order were excluded from the rank test."
+    );
   }, 60000);
 });

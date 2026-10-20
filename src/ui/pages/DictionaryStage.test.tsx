@@ -54,7 +54,7 @@ describe("DictionaryStage", () => {
     render(<DictionaryStage />);
 
     const dictionaryFile = makeWorkbookFile("dictionary.xlsx", {
-      Codebook: [
+      Dictionary: [
         ["Variable", "Label", "Encoding"],
         ["age", "Age in years", ""],
         ["sex", "Biological sex", "1: Female, 2: Male"],
@@ -71,7 +71,7 @@ describe("DictionaryStage", () => {
     });
 
     expect(screen.getByText("Select Dictionary Sheet")).toBeDefined();
-    expect((screen.getByRole("combobox") as HTMLSelectElement).value).toBe("uploaded:Codebook");
+    expect((screen.getByRole("combobox") as HTMLSelectElement).value).toBe("uploaded:Dictionary");
     await waitFor(() => expect(screen.getByText("2 of 2 data columns matched this dictionary.")).toBeDefined());
 
     fireEvent.click(screen.getByRole("button", { name: "Import dictionary" }));
@@ -131,7 +131,7 @@ describe("DictionaryStage", () => {
     render(<DictionaryStage />);
 
     const dictionaryFile = makeWorkbookFile("revised_dictionary.xlsx", {
-      Codebook: [
+      Dictionary: [
         ["variable", "label", "coding"],
         ["age", "Age at admission", ""],
         ["sex", "Sex at admission", "1: Female; 2: Male"],
@@ -214,7 +214,7 @@ describe("DictionaryStage", () => {
     render(<DictionaryStage embedded />);
 
     await waitFor(() => expect(screen.getByTestId("dictionary-detect-banner")).toBeDefined());
-    fireEvent.click(screen.getByRole("button", { name: "Use a different dictionary" }));
+    fireEvent.click(screen.getByRole("button", { name: "Choose another sheet" }));
 
     expect(screen.getByLabelText("Upload separate dictionary file")).toBeDefined();
     expect(screen.getByText("Select Dictionary Sheet")).toBeDefined();
@@ -254,7 +254,7 @@ describe("DictionaryStage", () => {
     render(<DictionaryStage embedded />);
 
     const dictionaryFile = makeWorkbookFile("wrong_dictionary.xlsx", {
-      Codebook: [
+      Dictionary: [
         ["Variable", "Label", "Encoding"],
         ["height", "Height", ""],
         ["weight", "Weight", ""],
@@ -282,7 +282,7 @@ describe("DictionaryStage", () => {
     render(<DictionaryStage embedded />);
 
     const dictionaryFile = makeWorkbookFile("partial_dictionary.xlsx", {
-      Codebook: [
+      Dictionary: [
         ["Variable", "Label", "Encoding"],
         ["age", "Age in years", ""],
         ["height", "Height", ""],

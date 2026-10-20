@@ -9,6 +9,8 @@ interface DecisionExplainerProps {
   label?: string;
   context?: EducationContext;
   depth?: ExplanationDepth;
+  open?: boolean;
+  onToggle?: () => void;
 }
 
 export function ExplainerDetails({
@@ -28,10 +30,11 @@ export function ExplainerDetails({
   );
 }
 
-export default function DecisionExplainer({ decisionId, label = "Why this?", context, depth }: DecisionExplainerProps) {
+export default function DecisionExplainer({ decisionId, label = "Why this?", context, depth, open: controlledOpen, onToggle }: DecisionExplainerProps) {
   const explanationDepth = useStore((state) => state.explanationDepth);
   const body = getDecisionBody(decisionId, depth ?? explanationDepth, context);
-  const [open, setOpen] = useState(false);
+  const [localOpen, setLocalOpen] = useState(false);
+  const open = controlledOpen ?? localOpen;
 
   return (
     <details
@@ -42,7 +45,8 @@ export default function DecisionExplainer({ decisionId, label = "Why this?", con
       <summary
         onClick={(event) => {
           event.preventDefault();
-          setOpen((value) => !value);
+          if (onToggle) onToggle();
+          else setLocalOpen((value) => !value);
         }}
         className="cursor-pointer select-none font-semibold text-sky-800"
       >

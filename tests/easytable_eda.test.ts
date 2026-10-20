@@ -36,7 +36,7 @@ function makeSchema(columns: Array<[string, Schema["columns"][number]["confirmed
 describe("easytable_eda.py", () => {
   beforeAll(async () => {
     await pyodideClient.isReady();
-  }, 60000);
+  });
 
   it("computes missingness, lower-triangle correlations, and optional bivariate plots", async () => {
     const data = makeDataFrame(["group", "a", "b", "c", "cat"], [

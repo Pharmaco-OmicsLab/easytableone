@@ -1,0 +1,24 @@
+{
+  "tsconfig": "tsconfig.app.json",
+  "entryPointStrategy": "expand",
+  "entryPoints": [
+    "src/core/parser/**/*.ts",
+    "src/core/schema/**/*.ts",
+    "src/core/qa/**/*.ts",
+    "src/core/stats/**/*.ts",
+    "src/core/format/**/*.ts",
+    "src/core/export/**/*.ts",
+    "src/core/modeling/**/*.ts",
+    "src/workers/pyodide.client.ts",
+    "src/core/types/index.ts",
+    "src/core/eda/types.ts",
+    "src/core/education/educationTypes.ts",
+    "src/core/bounds/boundsChecker.ts",
+    "src/core/bounds/types.ts"
+  ],
+  "exclude": ["**/*.test.ts", "**/*.test.tsx"],
+  "skipErrorChecking": true,
+  "requiredToBeDocumented": ["CallSignature", "TypeAlias", "Variable", "Class", "Enum", "EnumMember"],
+  "validation": { "notDocumented": true },
+  "out": "docs/api"
+}

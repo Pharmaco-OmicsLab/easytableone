@@ -40,6 +40,7 @@ interface DictionaryStageProps {
 
 export default function DictionaryStage({ embedded = false }: DictionaryStageProps) {
   const { file, sheets, data, schema, setSchema, setStage, addAuditEntry } = useStore();
+  const [dictionaryDragging, setDictionaryDragging] = useState(false);
   const [skip, setSkip] = useState(false);
   const [selectedDictionarySheet, setSelectedDictionarySheet] = useState<string>("");
   const [dictionaryFile, setDictionaryFile] = useState<File | null>(null);
@@ -419,9 +420,9 @@ export default function DictionaryStage({ embedded = false }: DictionaryStagePro
         <div className="mb-6 rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900" data-testid="dictionary-detect-banner">
           <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
             <div>
-              <div className="font-semibold text-blue-950">Dictionary sheet detected</div>
+                <div className="font-semibold text-blue-950">We found a dictionary on the “{candidates[0].sheetName}” sheet</div>
               <p className="mt-1">
-                Sheet "{candidates[0].sheetName}" matched {Object.keys(candidates[0].mapping).length} column{Object.keys(candidates[0].mapping).length === 1 ? "" : "s"}. Review below, then apply it for labels and units.
+                Labels and units can flow into your Table 1. Review the matches, then apply this dictionary.
               </p>
             </div>
           </div>
@@ -435,7 +436,7 @@ export default function DictionaryStage({ embedded = false }: DictionaryStagePro
                 </tr>
               </thead>
               <tbody>
-                {candidates[0].preview.slice(0, 4).map((row) => (
+                {candidates[0].preview.slice(0, 6).map((row) => (
                   <tr key={row.raw} className="border-t border-blue-100">
                     <td className="px-3 py-2 font-mono text-gray-700">{row.raw}</td>
                     <td className="px-3 py-2 text-gray-900">{row.label}</td>
@@ -445,15 +446,17 @@ export default function DictionaryStage({ embedded = false }: DictionaryStagePro
               </tbody>
             </table>
           </div>
+          <p className="mb-3 text-xs text-blue-800">Showing {Math.min(candidates[0].preview.length, 6)} of {Object.keys(candidates[0].mapping).length}</p>
+          <p className="mb-3 text-xs font-medium text-blue-900">{data ? data.columns.filter((column) => Boolean(candidates[0].mapping[column.name])).length : 0} / {data?.columns.length ?? 0} columns matched</p>
           <div className="flex flex-wrap items-center gap-2">
             <button type="button" onClick={() => handleAcceptDetected(candidates[0])} className="rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700">
               Use this dictionary
             </button>
             <button data-testid="dictionary-skip" type="button" onClick={handleSkipDetected} className="rounded border border-blue-200 bg-white px-3 py-1.5 text-sm text-blue-800 hover:bg-blue-50">
-              Skip - no dictionary
+              Skip — no dictionary
             </button>
             <button type="button" onClick={handleManualOverride} className="rounded px-1 py-1.5 text-sm font-medium text-blue-700 underline hover:text-blue-900">
-              Use a different dictionary
+              Choose another sheet
             </button>
           </div>
         </div>
@@ -489,16 +492,37 @@ export default function DictionaryStage({ embedded = false }: DictionaryStagePro
           </div>
 
           <div className="mb-8">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Upload separate dictionary file
-            </label>
-            <input
-              type="file"
-              accept=".xlsx,.csv"
-              onChange={(e) => e.target.files?.[0] && handleDictionaryFile(e.target.files[0])}
-              className="block w-full text-sm text-gray-700 file:mr-4 file:rounded file:border-0 file:bg-blue-50 file:px-4 file:py-2 file:text-sm file:font-medium file:text-blue-700 hover:file:bg-blue-100"
-              aria-label="Upload separate dictionary file"
-            />
+            <h3 className="mb-1 text-sm font-semibold text-gray-900">Upload a separate dictionary file (optional)</h3>
+            <p className="mb-3 text-sm text-gray-600">If your data dictionary is in its own file rather than a sheet of your data workbook, upload it here.</p>
+            <div
+              onDrop={(e) => { e.preventDefault(); setDictionaryDragging(false); const dropped = e.dataTransfer.files[0]; if (dropped) handleDictionaryFile(dropped); }}
+              onDragOver={(e) => { e.preventDefault(); setDictionaryDragging(true); }}
+              onDragLeave={() => setDictionaryDragging(false)}
+              className={`relative cursor-pointer rounded-xl border-2 border-dashed p-8 text-center transition-colors ${dictionaryDragging ? "border-blue-600 bg-blue-50" : "border-gray-300 bg-white hover:bg-gray-50"}`}
+            >
+              <div className="mb-3 text-gray-400">
+                <svg className="mx-auto h-10 w-10" stroke="currentColor" fill="none" viewBox="0 0 48 48" aria-hidden="true">
+                  <path
+                    d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02"
+                    strokeWidth={2}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </div>
+              <p className="text-base font-semibold text-gray-900">Drop your dictionary file here</p>
+              <p className="mt-1 text-sm text-gray-600">or browse files on this device</p>
+              <div className="mt-3 flex flex-wrap justify-center gap-2 text-xs"><span className="rounded-full bg-gray-100 px-3 py-1">.xlsx</span><span className="rounded-full bg-gray-100 px-3 py-1">.csv</span></div>
+              <input
+                id="dictionaryFileInput"
+                type="file"
+                accept=".xlsx,.csv"
+                className="hidden"
+                onChange={(e) => e.target.files?.[0] && handleDictionaryFile(e.target.files[0])}
+                aria-label="Upload separate dictionary file"
+              />
+              <label htmlFor="dictionaryFileInput" className="absolute inset-0 cursor-pointer" aria-label="Browse for a dictionary file" />
+            </div>
             {dictionaryFile && (
               <p className="mt-2 text-sm text-gray-600">
                 {dictionaryFile.name} loaded. {dictionarySheets.length} sheet{dictionarySheets.length === 1 ? "" : "s"} found.

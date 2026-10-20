@@ -26,6 +26,13 @@ async function computeDerivedSeed(data: DataFrame, plan: AnalysisPlan): Promise<
   return parseInt(last8, 16);
 }
 
+
+
+/**
+ * Runs the planned baseline comparisons in the local Pyodide engine and validates its response with `StatisticalResultsSchema`.
+ * If the plan has no seed, a stable seed is derived from the grouping levels, included variables, and row count; explicit
+ * user seeds are preserved. A malformed engine response rejects with the schema paths instead of returning partial results.
+ */
 export async function runTable1(data: DataFrame, plan: AnalysisPlan): Promise<StatisticalResults> {
   await pyodideClient.isReady();
 
@@ -63,6 +70,13 @@ export async function runTable1(data: DataFrame, plan: AnalysisPlan): Promise<St
   return parseResult.data;
 }
 
+
+
+/**
+ * Re-runs one variable's comparison using the supplied method override, preserving the rest of the plan and existing raw
+ * p values needed for multiplicity adjustment. The returned value is that variable's updated result; malformed engine
+ * output rejects with schema diagnostics.
+ */
 export async function recomputeVariable(
   data: DataFrame,
   plan: AnalysisPlan,
@@ -117,6 +131,12 @@ export async function recomputeVariable(
   return "result" in parseResult.data ? parseResult.data.result : parseResult.data;
 }
 
+
+
+/**
+ * Recomputes one variable and returns both its result and adjustment metadata for applying the change to the full table.
+ * The same deterministic seed policy and validated Pyodide response contract as `runTable1` apply.
+ */
 export async function recomputeVariableWithAdjustments(
   data: DataFrame,
   plan: AnalysisPlan,

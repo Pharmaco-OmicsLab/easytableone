@@ -26,6 +26,10 @@ export function normalizeBoundsName(value: string): string {
     .replace(/^_|_$/g, '');
 }
 
+export function normalizeBoundsUnit(value: string): string {
+  return value.toLowerCase().replace(/\s+/g, '').replace(/µ/g, 'u').replace(/\^/g, '');
+}
+
 export function loadBoundsLibrary(population: ResearchPopulation): BoundsLibrary | null {
   if (population === 'other') return null;
   return (population === 'pediatric' ? pediatricBounds : adultBounds) as BoundsLibrary;
@@ -53,21 +57,35 @@ function matchConcept(
 
   if (/(^|_)ratio($|_)/.test(normalizedName)) return null;
 
-  let best: { concept: BoundsConcept; score: number } | null = null;
+  let best: { concept: BoundsConcept; alias: string; score: number } | null = null;
   for (const concept of library.concepts) {
-    const score = Math.max(
-      ...concept.aliases
-        .map(normalizeBoundsName)
-        .filter((alias) => hasMeaningfulTokenOverlap(normalizedName, alias))
-        .map((alias) => jaroWinkler(normalizedName, alias)),
-    );
-    if (!best || score > best.score) {
-      best = { concept, score };
+    for (const alias of concept.aliases.map(normalizeBoundsName).filter((candidate) => hasMeaningfulTokenOverlap(normalizedName, candidate))) {
+      const score = jaroWinkler(normalizedName, alias);
+      if (!best || score > best.score) {
+        best = { concept, alias, score };
+      }
     }
   }
 
   if (!best || best.score < 0.85) return null;
+  if (unaccountedTokens(normalizedName, best.alias).length > 0) return null;
   return { concept: best.concept, matchedBy: 'jaro_winkler', matchScore: best.score };
+}
+
+const MATCH_QUALIFIER_TOKENS = new Set([
+  's', 'serum', 'blood', 'plasma', 'body', 'total', 'level', 'count', 'value', 'result',
+  'baseline', 'admission', 'followup', 'follow', 'post', 'pre', 'final',
+  'mg', 'dl', 'l', 'ml', 'ul', 'g', 'kg', 'cm', 'mmol', 'umol', 'iu', 'u', 'percent', 'pct', 'ratio', 'score',
+]);
+
+function isTimepointToken(token: string): boolean {
+  return /^(t|v|visit|wk|week|day|m|mo|yr)\d+$/.test(token);
+}
+
+function unaccountedTokens(normalizedName: string, normalizedAlias: string): string[] {
+  const aliasTokens = new Set(normalizedAlias.split('_').filter(Boolean));
+  return normalizedName.split('_').filter(Boolean)
+    .filter((token) => !aliasTokens.has(token) && !MATCH_QUALIFIER_TOKENS.has(token) && !isTimepointToken(token));
 }
 
 function hasMeaningfulTokenOverlap(normalizedName: string, normalizedAlias: string): boolean {
@@ -90,6 +108,9 @@ export function checkColumnBounds(
   if (!match) return null;
 
   const bounds = match.concept[unitSystem];
+  if (column.units?.trim() && normalizeBoundsUnit(column.units) !== normalizeBoundsUnit(bounds.unit)) {
+    return null;
+  }
   const violations = values.reduce<BoundsViolation[]>((acc, value, rowIndex) => {
     if (value === null) return acc;
     if (value < bounds.lower || value > bounds.upper) {

@@ -1,0 +1,113 @@
+{
+  "kind": "environment-smoke",
+  "generatedAt": "2026-10-09T07:03:10.233Z",
+  "browser": {
+    "name": "chromium",
+    "version": "147.0.7727.15"
+  },
+  "machine": {
+    "hostname": "LenovoSlim",
+    "cpuModel": "AMD Ryzen 7 8845HS w/ Radeon 780M Graphics",
+    "cores": 16,
+    "totalMemoryBytes": 67975368704,
+    "platform": "win32",
+    "release": "10.0.26200"
+  },
+  "protocol": {
+    "tableRepetitions": 5,
+    "fastModelRepetitions": 3,
+    "thoroughModelRepetitions": 1,
+    "warmCache": "second navigation in same fresh context"
+  },
+  "runs": [
+    {
+      "dataset": "HF",
+      "repetition": 1,
+      "rowCount": 299,
+      "inputColumnCount": 13,
+      "baselineVariableCount": 12,
+      "baselineVariables": [
+        "age",
+        "anaemia",
+        "creatinine_phosphokinase",
+        "diabetes",
+        "ejection_fraction",
+        "high_blood_pressure",
+        "platelets",
+        "serum_creatinine",
+        "serum_sodium",
+        "sex",
+        "smoking"
+      ],
+      "grouping": "DEATH_EVENT",
+      "modelOutcome": "DEATH_EVENT",
+      "modelPredictors": [
+        "age",
+        "anaemia",
+        "creatinine_phosphokinase",
+        "diabetes",
+        "ejection_fraction",
+        "high_blood_pressure",
+        "platelets",
+        "serum_creatinine",
+        "serum_sodium",
+        "sex",
+        "smoking"
+      ],
+      "sizeGateAppeared": false,
+      "sizeGateAcknowledged": false,
+      "status": "ok",
+      "stageReached": "complete",
+      "timings": {
+        "coldLoad_s": 18.3282061,
+        "warmLoad_s": 18.1680988,
+        "import_s": 0.30013700000000243,
+        "qaToPlan_s": 0.0846238000000012,
+        "stats_s": 0.505613900000004,
+        "docxExport_s": 0.3977314999999944,
+        "baselineTable_s": 1.2881062000000019,
+        "modelFast_s": 65.82511079999999,
+        "modelThorough_s": 469.0293278
+      },
+      "memory": {
+        "coldLoad": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 18.2
+        },
+        "warmLoad": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 18.2
+        },
+        "import": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 18.2
+        },
+        "qa": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 18.2
+        },
+        "plan": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 18.2
+        },
+        "statistics": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 18.2
+        },
+        "export": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 18.2
+        },
+        "modelFast": {
+          "wasmPeakMB": 225.247232,
+          "jsHeapMB": 18.2
+        },
+        "modelThorough": {
+          "wasmPeakMB": 225.247232,
+          "jsHeapMB": 18.2
+        }
+      },
+      "coldLoadBytes": 58296965
+    }
+  ]
+}

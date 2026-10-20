@@ -5,10 +5,12 @@
   },
   "pyodide": {
     "include": [
+      "tests/aggregateOnly.test.ts",
       "tests/easytable_eda.test.ts",
       "tests/fungi.e2e.test.ts",
       "src/core/export/analysisHistory.test.ts",
       "tests/golden/cross_validation.test.ts",
+      "tests/golden/export_r_tableone.test.ts",
       "tests/modeling_pyodide.test.ts",
       "tests/outlier_roundtrip.test.ts",
       "tests/perf.test.ts",

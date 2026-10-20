@@ -1,9 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useStore } from "../../store";
 import { journalRulesets } from "../../core/format/formatTable";
 import type { UserOverrides } from "../../core/types";
 
-export default function JournalOverridePanel({ hideHeader = false }: { hideHeader?: boolean }) {
+export default function JournalOverridePanel({ hideHeader = false, layout }: { hideHeader?: boolean; layout?: "narrow" | "wide" }) {
   const { plan, setPlan, journalId } = useStore();
 
   const journalConfig = journalRulesets.EasyTableOne_Ruleset.journals.find(
@@ -16,6 +16,9 @@ export default function JournalOverridePanel({ hideHeader = false }: { hideHeade
   const defaultIqrDelim = journalConfig?.summary_statistics.iqr_delimiter ?? " to ";
   const defaultPThreshold = journalConfig?.p_value_formatting.threshold_low ?? "<0.001";
   const defaultPSigDigits = journalConfig?.p_value_formatting.max_decimal_places ?? 3;
+  const conditionalPValueDecimals = journalConfig?.p_value_formatting.conditional_decimals ?? [];
+  const hasConditionalPValueDecimals = (journalConfig?.p_value_formatting.conditional_decimals?.length ?? 0) > 0;
+  const conditionalPValueDefault = describeConditionalPValueDefault(conditionalPValueDecimals, defaultPSigDigits);
   const defaultTitleTemplate = journalConfig?.table_title_template ?? "";
   const defaultCodingTitle = journalConfig?.variable_coding_section_title ?? "";
 
@@ -34,6 +37,20 @@ export default function JournalOverridePanel({ hideHeader = false }: { hideHeade
   );
 
   const [pValError, setPValError] = useState<string | null>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const [isWide, setIsWide] = useState(layout === "wide");
+
+  useEffect(() => {
+    if (layout) {
+      setIsWide(layout === "wide");
+      return;
+    }
+    const panel = panelRef.current;
+    if (!panel || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(([entry]) => setIsWide(entry.contentRect.width >= 640));
+    observer.observe(panel);
+    return () => observer.disconnect();
+  }, [layout]);
 
   // Sync state when journal changes
   useEffect(() => {
@@ -103,7 +120,7 @@ export default function JournalOverridePanel({ hideHeader = false }: { hideHeade
     }
 
     if (updated.pValueSignificantDigits !== undefined) {
-      if (updated.pValueSignificantDigits !== defaultPSigDigits) {
+      if (hasConditionalPValueDecimals || updated.pValueSignificantDigits !== defaultPSigDigits) {
         nextOverrides.pValueSignificantDigits = updated.pValueSignificantDigits;
       } else {
         delete nextOverrides.pValueSignificantDigits;
@@ -182,7 +199,7 @@ export default function JournalOverridePanel({ hideHeader = false }: { hideHeade
   const hasAnyOverride = plan.userOverrides && Object.keys(plan.userOverrides).length > 0;
 
   return (
-    <div className={hideHeader ? "space-y-6" : "bg-white border rounded-xl p-6 shadow-sm space-y-6"}>
+    <div ref={panelRef} data-testid="journal-override-panel" data-layout={isWide ? "wide" : "narrow"} className={hideHeader ? "space-y-6" : "bg-white border rounded-xl p-6 shadow-sm space-y-6"}>
       {!hideHeader && (
         <div className="flex items-center justify-between border-b pb-4">
           <div>
@@ -217,15 +234,15 @@ export default function JournalOverridePanel({ hideHeader = false }: { hideHeade
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div data-testid="override-settings-grid" className={`grid gap-6 ${isWide ? "grid-cols-2" : "grid-cols-1"}`}>
         {/* Left column: Number Formatting */}
         <div className="space-y-4">
           <h4 className="font-semibold text-sm text-gray-700 uppercase tracking-wider">Number Formatting</h4>
           
-          <div className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-50">
+          <div className="flex flex-col items-stretch gap-2 p-2 rounded-lg hover:bg-gray-50">
             <div className="flex flex-col">
               <label htmlFor="thousand-separator" className="text-sm font-medium text-gray-800">Thousand Separator</label>
-              <span className="text-xs text-gray-400">Default: {defaultThousand ? "Yes" : "No"}</span>
+              <span className="text-xs text-gray-600">Default: {defaultThousand ? "Yes" : "No"}</span>
             </div>
             <div className="flex items-center space-x-2">
               {isThousandOverridden && <span className="text-[10px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full font-medium">(overridden)</span>}
@@ -243,12 +260,12 @@ export default function JournalOverridePanel({ hideHeader = false }: { hideHeade
             </div>
           </div>
 
-          <div className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-50">
+          <div className="flex flex-col items-stretch gap-2 p-2 rounded-lg hover:bg-gray-50">
             <div className="flex flex-col">
               <label htmlFor="decimal-precision" className="text-sm font-medium text-gray-800">Decimal Precision</label>
-              <span className="text-xs text-gray-400">Default: {defaultDecimals} places</span>
+              <span className="text-xs text-gray-600">Default: {defaultDecimals} places</span>
             </div>
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center gap-2 w-full">
               {isDecimalsOverridden && <span className="text-[10px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full font-medium">(overridden)</span>}
               <select
                 id="decimal-precision"
@@ -258,7 +275,7 @@ export default function JournalOverridePanel({ hideHeader = false }: { hideHeade
                   setDecimals(val);
                   handleUpdate({ numberFormat: { decimalPlaces: val } });
                 }}
-                className="border rounded-lg p-1.5 text-sm bg-white shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                className="w-full border rounded-lg p-1.5 text-sm bg-white shadow-sm focus:ring-blue-500 focus:border-blue-500"
               >
                 {[0, 1, 2, 3, 4].map((d) => (
                   <option key={d} value={d}>{d}</option>
@@ -267,12 +284,12 @@ export default function JournalOverridePanel({ hideHeader = false }: { hideHeade
             </div>
           </div>
 
-          <div className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-50">
+          <div className="flex flex-col items-stretch gap-2 p-2 rounded-lg hover:bg-gray-50">
             <div className="flex flex-col">
               <label htmlFor="suppress-zeros" className="text-sm font-medium text-gray-800">Suppress Trailing Zeros</label>
-              <span className="text-xs text-gray-400">Default: {defaultSuppressZeros ? "Yes" : "No"}</span>
+              <span className="text-xs text-gray-600">Default: {defaultSuppressZeros ? "Yes" : "No"}</span>
             </div>
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center gap-2 w-full">
               {isSuppressZerosOverridden && <span className="text-[10px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full font-medium">(overridden)</span>}
               <input
                 id="suppress-zeros"
@@ -288,12 +305,12 @@ export default function JournalOverridePanel({ hideHeader = false }: { hideHeade
             </div>
           </div>
 
-          <div className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-50">
-            <div className="flex flex-col w-2/3">
+          <div className="flex flex-col items-stretch gap-2 p-2 rounded-lg hover:bg-gray-50">
+            <div className="flex flex-col w-full">
               <label htmlFor="iqr-delimiter" className="text-sm font-medium text-gray-800">IQR Delimiter</label>
-              <span className="text-xs text-gray-400">Default: "{defaultIqrDelim}"</span>
+              <span className="text-xs text-gray-600">Default: "{defaultIqrDelim}"</span>
             </div>
-            <div className="flex items-center space-x-2 w-1/3 justify-end">
+            <div className="flex items-center gap-2 w-full">
               {isIqrDelimOverridden && <span className="text-[10px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full font-medium">(overridden)</span>}
               <input
                 id="iqr-delimiter"
@@ -304,7 +321,7 @@ export default function JournalOverridePanel({ hideHeader = false }: { hideHeade
                   setIqrDelim(val);
                   handleUpdate({ iqrDelimiter: val });
                 }}
-                className="border rounded-lg p-1.5 text-sm w-20 text-center focus:ring-blue-500 focus:border-blue-500"
+                className="border rounded-lg p-1.5 text-sm w-full focus:ring-blue-500 focus:border-blue-500"
               />
             </div>
           </div>
@@ -314,13 +331,13 @@ export default function JournalOverridePanel({ hideHeader = false }: { hideHeade
         <div className="space-y-4">
           <h4 className="font-semibold text-sm text-gray-700 uppercase tracking-wider">P-values & Text Titles</h4>
 
-          <div className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-50">
-            <div className="flex flex-col w-3/5">
+          <div className="flex flex-col items-stretch gap-2 p-2 rounded-lg hover:bg-gray-50">
+            <div className="flex flex-col w-full">
               <label htmlFor="p-value-threshold" className="text-sm font-medium text-gray-800">P-value Threshold</label>
-              <span className="text-xs text-gray-400">Default: {defaultPThreshold}</span>
+              <span className="text-xs text-gray-600">Default: {defaultPThreshold}</span>
             </div>
-            <div className="flex flex-col items-end space-y-1 w-2/5">
-              <div className="flex items-center space-x-2 justify-end w-full">
+            <div className="flex flex-col items-start space-y-1 w-full">
+              <div className="flex items-center gap-2 w-full">
                 {isPThresholdOverridden && <span className="text-[10px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full font-medium">(overridden)</span>}
                 <input
                   id="p-value-threshold"
@@ -336,19 +353,25 @@ export default function JournalOverridePanel({ hideHeader = false }: { hideHeade
                       setPValError("Must start with '<' followed by decimal.");
                     }
                   }}
-                  className={`border rounded-lg p-1.5 text-sm w-24 text-center focus:ring-blue-500 focus:border-blue-500 ${pValError ? "border-red-400" : ""}`}
+                  className={`border rounded-lg p-1.5 text-sm w-full focus:ring-blue-500 focus:border-blue-500 ${pValError ? "border-red-400" : ""}`}
                 />
               </div>
-              {pValError && <span className="text-[10px] text-red-500">{pValError}</span>}
+              {pValError && <span className="text-xs text-red-600">{pValError}</span>}
             </div>
           </div>
 
-          <div className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-50">
+          <div className="flex flex-col items-stretch gap-2 p-2 rounded-lg hover:bg-gray-50">
             <div className="flex flex-col">
               <label htmlFor="p-sig-digits" className="text-sm font-medium text-gray-800">P-value Max Decimals</label>
-              <span className="text-xs text-gray-400">Default: {defaultPSigDigits} places</span>
+              <span className="text-xs text-gray-600">{conditionalPValueDefault}</span>
+              {hasConditionalPValueDecimals && (
+                <details className="text-xs text-gray-600">
+                  <summary className="cursor-pointer text-blue-700">Why?</summary>
+                  <p className="mt-1">Overrides this journal's conditional P-value rounding rules and applies a fixed number of decimal places.</p>
+                </details>
+              )}
             </div>
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center gap-2 w-full">
               {isPSigDigitsOverridden && <span className="text-[10px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full font-medium">(overridden)</span>}
               <select
                 id="p-sig-digits"
@@ -358,7 +381,7 @@ export default function JournalOverridePanel({ hideHeader = false }: { hideHeade
                   setPSigDigits(val);
                   handleUpdate({ pValueSignificantDigits: val });
                 }}
-                className="border rounded-lg p-1.5 text-sm bg-white shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                className="w-full border rounded-lg p-1.5 text-sm bg-white shadow-sm focus:ring-blue-500 focus:border-blue-500"
               >
                 {[1, 2, 3, 4].map((d) => (
                   <option key={d} value={d}>{d}</option>
@@ -386,7 +409,7 @@ export default function JournalOverridePanel({ hideHeader = false }: { hideHeade
               className="border rounded-lg p-2 text-sm w-full focus:ring-blue-500 focus:border-blue-500"
               placeholder="e.g. Table 1: Baseline Characteristics, by {grouping_label}"
             />
-            <span className="text-[10px] text-gray-400">Default: {defaultTitleTemplate}</span>
+            <span className="text-xs text-gray-600">Default: {defaultTitleTemplate}</span>
           </div>
 
           <div className="flex flex-col p-2 rounded-lg hover:bg-gray-50 space-y-1.5">
@@ -428,17 +451,17 @@ export default function JournalOverridePanel({ hideHeader = false }: { hideHeade
                 placeholder="e.g. Coding Notes"
               />
             )}
-            <span className="text-[10px] text-gray-400">
+            <span className="text-xs text-gray-600">
               Default: {defaultCodingTitle === null ? "Suppressed" : defaultCodingTitle || "None"}
             </span>
           </div>
 
-          <div className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-50">
+          <div className="flex flex-col items-stretch gap-2 p-2 rounded-lg hover:bg-gray-50">
             <div className="flex flex-col">
               <label htmlFor="show-zero-levels" className="text-sm font-medium text-gray-800">
                 Show planned levels with zero count
               </label>
-              <span className="text-xs text-gray-400">Default: No</span>
+              <span className="text-xs text-gray-600">Default: No</span>
             </div>
             <div className="flex items-center space-x-2">
               {isShowZeroLevelsOverridden && <span className="text-[10px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full font-medium">(overridden)</span>}
@@ -456,12 +479,12 @@ export default function JournalOverridePanel({ hideHeader = false }: { hideHeade
             </div>
           </div>
 
-          <div className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-50">
+          <div className="flex flex-col items-stretch gap-2 p-2 rounded-lg hover:bg-gray-50">
             <div className="flex flex-col">
               <label htmlFor="show-missing-rows" className="text-sm font-medium text-gray-800">
                 Show a per-variable missing-data row
               </label>
-              <span className="text-xs text-gray-400">Default: No</span>
+              <span className="text-xs text-gray-600">Default: No</span>
             </div>
             <div className="flex items-center space-x-2">
               {isShowMissingRowsOverridden && <span className="text-[10px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full font-medium">(overridden)</span>}
@@ -482,4 +505,18 @@ export default function JournalOverridePanel({ hideHeader = false }: { hideHeade
       </div>
     </div>
   );
+}
+
+function describeConditionalPValueDefault(
+  rules: Array<{ range: string; decimals?: number }>,
+  fallbackDecimals: number,
+): string {
+  const decimalRules = rules.filter((rule): rule is { range: string; decimals: number } => rule.decimals !== undefined);
+  if (decimalRules.length === 0) return `Default: ${fallbackDecimals} places`;
+
+  const decimalPlaces = decimalRules.map((rule) => rule.decimals);
+  const min = Math.min(...decimalPlaces);
+  const max = Math.max(...decimalPlaces);
+  const range = min === max ? `${min} places` : `${min}–${max} places`;
+  return `Default: ${range} (journal rule)`;
 }

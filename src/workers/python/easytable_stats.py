@@ -22,6 +22,10 @@ HETEROSCEDASTIC_ANOVA_NOTE = (
     "Welch's ANOVA, which is not available in this release. Switching to Kruskal-Wallis does not "
     "address unequal variances and is not a substitute."
 )
+POSTHOC_HETEROSCEDASTIC_NOTE = (
+    "Tukey HSD assumes equal variances, which the Levene/Brown-Forsythe check did not support "
+    "for this variable; pairwise P values should be interpreted with caution."
+)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -209,7 +213,7 @@ def _normality_check(var_groups_data):
     return normal, (min(shapiro_pvals) if shapiro_pvals else None), method
 
 
-def compute_posthoc(test_name, groups, var_groups_data, df_group, var, group_var, is_categorical, omnibus_p, rng, yates=False):
+def compute_posthoc(test_name, groups, var_groups_data, df_group, var, group_var, is_categorical, omnibus_p, rng, yates=False, levene_p=None):
     """Pairwise post-hoc comparisons for significant k>2 omnibus tests."""
     if len(groups) <= 2 or omnibus_p is None or omnibus_p >= POSTHOC_ALPHA:
         return None
@@ -241,7 +245,10 @@ def compute_posthoc(test_name, groups, var_groups_data, df_group, var, group_var
                     "pValueCorrected": p_adj,
                     "significant": bool(tukey.reject[i]),
                 })
-            return {"reason": reason, "correction": "tukey", "method": "tukey_hsd", "pairs": pairs}
+            res = {"reason": reason, "correction": "tukey", "method": "tukey_hsd", "pairs": pairs}
+            if levene_p is not None and levene_p < 0.05:
+                res["caveat"] = POSTHOC_HETEROSCEDASTIC_NOTE
+            return res
         except Exception as e:
             return {
                 "reason": reason,
@@ -318,6 +325,34 @@ def compute_posthoc(test_name, groups, var_groups_data, df_group, var, group_var
         return {"reason": reason, "correction": "holm", "method": "pairwise_chi_square_fisher", "pairs": pairs}
 
     return None
+
+
+def _ordinal_key(v):
+    """Normalize ordinal levels and values to a common string key.
+    Numeric values and integer-like float values (e.g. 1.0 from pandas float64)
+    and numeric strings (e.g. '01') are normalized to integer strings so that
+    type differences between JSON level order and DataFrame representation match.
+    Maps plain digit strings such as '01' to '1' (R1 mitigation).
+    Missing values (None, NaN) return None.
+    """
+    if v is None:
+        return None
+    if isinstance(v, (bool, np.bool_)):
+        return str(v)
+    if isinstance(v, (int, np.integer)):
+        return str(int(v))
+    if isinstance(v, (float, np.floating)):
+        if not np.isfinite(v):
+            return None
+        return str(int(v)) if float(v).is_integer() else repr(float(v))
+    s = str(v).strip()
+    try:
+        f = float(s)
+        if np.isfinite(f) and f.is_integer() and s.lstrip("+-").replace(".", "", 1).isdigit():
+            return str(int(f))
+    except ValueError:
+        pass
+    return s
 
 
 def _clean_summary_series(series, is_categorical):
@@ -443,13 +478,12 @@ def run_table1(data_json, plan_json):
             groups = sorted(present_groups, key=lambda g: (-int(freq[g]), str(g)))
 
         group_data = [df_group[df_group[group_var] == g] for g in groups]
-        n_min = min(len(g) for g in group_data) if group_data else 0
+        # Normality criterion is assessed per group by each group's own size (PLAN §4.1, D103(c))
         total_n = len(df_group)
     else:
         df_group = df
         groups = []
         group_data = []
-        n_min = len(df)
         total_n = len(df)
 
     # Map test overrides
@@ -564,6 +598,8 @@ def run_table1(data_json, plan_json):
             override = 'chisquare'
         elif js_override == 'fishers_exact':
             override = 'fisher'
+        elif js_override == 'ordinal_rank':
+            override = 'ordinal_rank'
         
         if not override:
             override = conf.get('statisticalTestOverride')
@@ -577,6 +613,8 @@ def run_table1(data_json, plan_json):
         levene_p = None
         normal = True
         normality_method = None
+        is_ordinal_rank = False
+        rank_arrays = []
 
         if len(groups) >= 2:
             any_empty = any(len(g) == 0 for g in var_groups_data)
@@ -600,13 +638,56 @@ def run_table1(data_json, plan_json):
 
                     auto_method = _categorical_auto_method(contingency, min_exp)
 
-                    if not override:
-                        test_to_run = 'fisher' if min_exp < 5 else 'chisquare'
-                    else:
-                        test_to_run = override
+                    level_order = conf.get('levelOrder') or []
+                    if override == 'ordinal_rank':
+                        if treat_as == 'categorical_ordinal' and isinstance(level_order, list) and len(level_order) >= 3:
+                            is_ordinal_rank = True
+                            test_to_run = 'ordinal_rank'
+                        else:
+                            notes.append("Ordinal rank test requires an ordered categorical variable with at least 3 levels; the default test was used.")
+                            override = None
+
+                    if not is_ordinal_rank:
+                        if not override:
+                            test_to_run = 'fisher' if min_exp < 5 else 'chisquare'
+                        else:
+                            test_to_run = override
 
                     try:
-                        if test_to_run == 'fisher':
+                        if is_ordinal_rank:
+                            order_map = {_ordinal_key(lvl): i for i, lvl in enumerate(level_order)}
+                            excluded_count = 0
+                            rank_arrays = []
+                            for g_s in var_groups_data:
+                                g_ranks = []
+                                for x in g_s:
+                                    k = _ordinal_key(x)
+                                    if k is None:
+                                        continue
+                                    if k in order_map:
+                                        g_ranks.append(float(order_map[k]))
+                                    else:
+                                        excluded_count += 1
+                                rank_arrays.append(pd.Series(g_ranks, dtype=float))
+                            if excluded_count > 0:
+                                notes.append(f"{excluded_count} value(s) not in the declared level order were excluded from the rank test.")
+
+                            if len(groups) == 2:
+                                s, p = stats.mannwhitneyu(
+                                    rank_arrays[0],
+                                    rank_arrays[1],
+                                    alternative='two-sided',
+                                )
+                                stat, pval, test_name = float(s), float(p), "Mann-Whitney U (ordinal)"
+                            else:
+                                s, p = stats.kruskal(*rank_arrays)
+                                stat, pval, test_name = float(s), float(p), "Kruskal-Wallis (ordinal)"
+
+                            if stat is not None and (np.isnan(stat) or np.isinf(stat)):
+                                stat = None
+                            if pval is not None and (np.isnan(pval) or np.isinf(pval)):
+                                pval = None
+                        elif test_to_run == 'fisher':
                             # scipy >= 1.15 supports R×C Fisher exact natively
                             try:
                                 if contingency.shape == (2, 2):
@@ -638,7 +719,7 @@ def run_table1(data_json, plan_json):
                             pval      = float(pval_chi)
                             df_deg    = int(dof)
                             test_name = 'Chi-square'
-                            if yates:
+                            if yates and dof == 1:
                                 notes.append("Yates' continuity correction applied.")
                     except Exception as e:
                         notes.append(f'Test failed: {e}')
@@ -751,6 +832,8 @@ def run_table1(data_json, plan_json):
                 aux['minExpectedCount'] = float(min_exp)
             contradicted = (test_to_run == 'chisquare' and min_exp is not None and min_exp < 5)
             aux['assumptionCheckContradicted'] = "true" if contradicted else "false"
+            if contradicted:
+                aux['contradictionReason'] = "low_expected_count"
         else:
             aux['autoMethod'] = auto_method
             if min_shapiro_p is not None:
@@ -761,8 +844,16 @@ def run_table1(data_json, plan_json):
                 aux['levenePValue'] = float(levene_p)
             contradicted = (test_to_run in ('student', 'welch', 'ttest', 'anova') and not normal) or (test_to_run == 'anova' and levene_p is not None and levene_p < 0.05)
             aux['assumptionCheckContradicted'] = "true" if contradicted else "false"
+            if contradicted:
+                if test_to_run in ('student', 'welch', 'ttest', 'anova') and not normal:
+                    aux['contradictionReason'] = "non_normality"
+                elif test_to_run == 'anova' and levene_p is not None and levene_p < 0.05:
+                    aux['contradictionReason'] = "unequal_variance"
 
-        if test_name == "Fisher's exact" and fisher_or is not None:
+        # Python's json.dumps permits Infinity, but it is not valid JSON for
+        # the browser parser. An odds ratio is optional metadata, so omit it
+        # for separated 2x2 tables where SciPy reports an infinite value.
+        if test_name == "Fisher's exact" and fisher_or is not None and np.isfinite(fisher_or):
             aux['oddsRatio'] = fisher_or
         test_obj['auxiliary'] = aux
         
@@ -777,12 +868,13 @@ def run_table1(data_json, plan_json):
             'plotData':       plot_data,
         }
         result_entry["_posthoc_ctx"] = {
-            "test_name": test_name,
+            "test_name": "Kruskal-Wallis" if is_ordinal_rank else test_name,
             "groups": groups,
-            "var_groups_data": var_groups_data,
+            "var_groups_data": rank_arrays if is_ordinal_rank else var_groups_data,
             "var": var,
-            "is_categorical": is_categorical,
+            "is_categorical": False if is_ordinal_rank else is_categorical,
             "yates": yates,
+            "levene_p": levene_p,
         }
         results.append(result_entry)
 
@@ -813,6 +905,7 @@ def run_table1(data_json, plan_json):
             ctx["test_name"], ctx["groups"], ctx["var_groups_data"],
             df_group, ctx["var"], group_var, ctx["is_categorical"],
             omnibus_p, rng, ctx["yates"],
+            levene_p=ctx.get("levene_p"),
         )
         if posthoc is not None:
             r["postHoc"] = posthoc
@@ -897,13 +990,12 @@ def recompute_variable(data_json, plan_json, target_var, method_override=None, e
             groups = sorted(present_groups, key=lambda g: (-int(freq[g]), str(g)))
 
         group_data = [df_group[df_group[group_var] == g] for g in groups]
-        n_min = min(len(g) for g in group_data) if group_data else 0
+        # Normality criterion is assessed per group by each group's own size (PLAN §4.1, D103(c))
         total_n = len(df_group)
     else:
         df_group = df
         groups = []
         group_data = []
-        n_min = len(df)
         total_n = len(df)
 
     conf = var_config.get(target_var, {})
@@ -915,7 +1007,7 @@ def recompute_variable(data_json, plan_json, target_var, method_override=None, e
     if method_override:
         num_g = len(groups)
         if is_categorical:
-            allowed = ('chi_square', 'fishers_exact')
+            allowed = ('chi_square', 'fishers_exact', 'ordinal_rank')
             if method_override not in allowed:
                 raise ValueError(f"Method '{method_override}' is not allowed for categorical variable '{target_var}'")
         else:
@@ -1020,6 +1112,8 @@ def recompute_variable(data_json, plan_json, target_var, method_override=None, e
         override = 'chisquare'
     elif method_override == 'fishers_exact':
         override = 'fisher'
+    elif method_override == 'ordinal_rank':
+        override = 'ordinal_rank'
 
     if not override:
         override = conf.get('statisticalTestOverride')
@@ -1032,6 +1126,8 @@ def recompute_variable(data_json, plan_json, target_var, method_override=None, e
     levene_p = None
     normal = True
     normality_method = None
+    is_ordinal_rank = False
+    rank_arrays = []
 
     if len(groups) >= 2:
         any_empty = any(len(g) == 0 for g in var_groups_data)
@@ -1055,13 +1151,56 @@ def recompute_variable(data_json, plan_json, target_var, method_override=None, e
 
                 auto_method = _categorical_auto_method(contingency, min_exp)
 
-                if not override:
-                    test_to_run = 'fisher' if min_exp < 5 else 'chisquare'
-                else:
-                    test_to_run = override
+                level_order = conf.get('levelOrder') or []
+                if override == 'ordinal_rank':
+                    if treat_as == 'categorical_ordinal' and isinstance(level_order, list) and len(level_order) >= 3:
+                        is_ordinal_rank = True
+                        test_to_run = 'ordinal_rank'
+                    else:
+                        notes.append("Ordinal rank test requires an ordered categorical variable with at least 3 levels; the default test was used.")
+                        override = None
+
+                if not is_ordinal_rank:
+                    if not override:
+                        test_to_run = 'fisher' if min_exp < 5 else 'chisquare'
+                    else:
+                        test_to_run = override
 
                 try:
-                    if test_to_run == 'fisher':
+                    if is_ordinal_rank:
+                        order_map = {_ordinal_key(lvl): i for i, lvl in enumerate(level_order)}
+                        excluded_count = 0
+                        rank_arrays = []
+                        for g_s in var_groups_data:
+                            g_ranks = []
+                            for x in g_s:
+                                k = _ordinal_key(x)
+                                if k is None:
+                                    continue
+                                if k in order_map:
+                                    g_ranks.append(float(order_map[k]))
+                                else:
+                                    excluded_count += 1
+                            rank_arrays.append(pd.Series(g_ranks, dtype=float))
+                        if excluded_count > 0:
+                            notes.append(f"{excluded_count} value(s) not in the declared level order were excluded from the rank test.")
+
+                        if len(groups) == 2:
+                            s, p = stats.mannwhitneyu(
+                                rank_arrays[0],
+                                rank_arrays[1],
+                                alternative='two-sided',
+                            )
+                            stat, pval, test_name = float(s), float(p), "Mann-Whitney U (ordinal)"
+                        else:
+                            s, p = stats.kruskal(*rank_arrays)
+                            stat, pval, test_name = float(s), float(p), "Kruskal-Wallis (ordinal)"
+
+                        if stat is not None and (np.isnan(stat) or np.isinf(stat)):
+                            stat = None
+                        if pval is not None and (np.isnan(pval) or np.isinf(pval)):
+                            pval = None
+                    elif test_to_run == 'fisher':
                         try:
                             if contingency.shape == (2, 2):
                                 result = stats.fisher_exact(contingency)
@@ -1091,7 +1230,7 @@ def recompute_variable(data_json, plan_json, target_var, method_override=None, e
                         pval      = float(pval_chi)
                         df_deg    = int(dof)
                         test_name = 'Chi-square'
-                        if yates:
+                        if yates and dof == 1:
                             notes.append("Yates' continuity correction applied.")
                 except Exception as e:
                     notes.append(f'Test failed: {e}')
@@ -1200,6 +1339,8 @@ def recompute_variable(data_json, plan_json, target_var, method_override=None, e
             aux['minExpectedCount'] = float(min_exp)
         contradicted = (test_to_run == 'chisquare' and min_exp is not None and min_exp < 5)
         aux['assumptionCheckContradicted'] = "true" if contradicted else "false"
+        if contradicted:
+            aux['contradictionReason'] = "low_expected_count"
     else:
         aux['autoMethod'] = auto_method
         if min_shapiro_p is not None:
@@ -1210,8 +1351,14 @@ def recompute_variable(data_json, plan_json, target_var, method_override=None, e
             aux['levenePValue'] = float(levene_p)
         contradicted = (test_to_run in ('student', 'welch', 'ttest', 'anova') and not normal) or (test_to_run == 'anova' and levene_p is not None and levene_p < 0.05)
         aux['assumptionCheckContradicted'] = "true" if contradicted else "false"
+        if contradicted:
+            if test_to_run in ('student', 'welch', 'ttest', 'anova') and not normal:
+                aux['contradictionReason'] = "non_normality"
+            elif test_to_run == 'anova' and levene_p is not None and levene_p < 0.05:
+                aux['contradictionReason'] = "unequal_variance"
 
-    if test_name == "Fisher's exact" and fisher_or is not None:
+    # Keep recomputation output JSON-safe for separated 2x2 Fisher tables too.
+    if test_name == "Fisher's exact" and fisher_or is not None and np.isfinite(fisher_or):
         aux['oddsRatio'] = fisher_or
     
     test_obj['auxiliary'] = aux
@@ -1249,8 +1396,17 @@ def recompute_variable(data_json, plan_json, target_var, method_override=None, e
 
     # --- Post-hoc gated on the effective (possibly adjusted) omnibus p ---
     posthoc = compute_posthoc(
-        test_name, groups, var_groups_data, df_group, target_var,
-        group_var, is_categorical, omnibus_p_for_posthoc, rng, yates,
+        "Kruskal-Wallis" if is_ordinal_rank else test_name,
+        groups,
+        rank_arrays if is_ordinal_rank else var_groups_data,
+        df_group,
+        target_var,
+        group_var,
+        False if is_ordinal_rank else is_categorical,
+        omnibus_p_for_posthoc,
+        rng,
+        yates,
+        levene_p=levene_p,
     )
 
     plot_data = compute_plot_data(df_group, target_var, group_var, is_categorical)

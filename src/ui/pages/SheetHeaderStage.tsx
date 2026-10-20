@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import * as XLSX from "xlsx";
 import { enumerateSheets, parseXLSXSheet } from "../../core/parser/xlsx";
-import { LARGE_N_NOTICE_THRESHOLD, describeLargeNNotice } from "../../core/performance/largeDatasetGuardrails";
+import { LARGE_N_NOTICE_THRESHOLD, describeLargeNNotice, MAX_DATA_ROWS, describeRowLimitExceeded } from "../../core/performance/largeDatasetGuardrails";
 import { useStore } from "../../store";
 import AboutThisStep from "../components/AboutThisStep";
 import type { Cell } from "../../core/types";
@@ -9,6 +9,7 @@ import type { Cell } from "../../core/types";
 interface PreviewState {
   headers: string[];
   rows: Cell[][];
+  rawRows: Cell[][];
   rowCount: number;
   colCount: number;
 }
@@ -45,7 +46,7 @@ export default function SheetHeaderStage({ embedded = false }: SheetHeaderStageP
     setError,
   } = useStore();
   const isCSV = file?.name.toLowerCase().endsWith(".csv");
-  const shouldShowSheetPicker = !isCSV && sheets.length !== 1;
+  const shouldShowSheetPicker = !isCSV;
 
   const [loading, setLoading] = useState(false);
   const [preview, setPreview] = useState<PreviewState | null>(null);
@@ -89,6 +90,7 @@ export default function SheetHeaderStage({ embedded = false }: SheetHeaderStageP
         setPreview({
           headers: data.columns.map((c) => c.originalName),
           rows: data.rows.slice(0, 5),
+          rawRows: [data.columns.map((c) => c.originalName), ...data.rows.slice(0, 9)],
           rowCount: data.rows.length,
           colCount: data.columns.length,
         });
@@ -111,12 +113,15 @@ export default function SheetHeaderStage({ embedded = false }: SheetHeaderStageP
           .filter((row) => row.some((cell) => cellText(cell) !== ""))
           .slice(0, 5);
         if (!cancelled) {
-          setPreview({
+          const nextPreview = {
             headers: header.map((h, i) => cellText(h) || `Column_${i + 1}`),
             rows,
-            rowCount: Math.max(0, rawRows.length - headerRowIndex - 1),
+            rawRows: rawRows.slice(0, Math.max(10, headerRowIndex + 2)),
+            rowCount: rawRows.slice(headerRowIndex + 1).filter((row) => row?.some((cell) => cellText(cell) !== "")).length,
             colCount: header.length,
-          });
+          };
+          setPreview(nextPreview);
+          if (nextPreview.rowCount > MAX_DATA_ROWS) setError(describeRowLimitExceeded(nextPreview.rowCount));
         }
       } catch {
         if (!cancelled) setPreview(null);
@@ -127,7 +132,7 @@ export default function SheetHeaderStage({ embedded = false }: SheetHeaderStageP
     return () => {
       cancelled = true;
     };
-  }, [data, file, headerRowIndex, isCSV, selectedSheet]);
+  }, [data, file, headerRowIndex, isCSV, selectedSheet, setError]);
 
   const handleNext = async () => {
     if (isCSV) {
@@ -139,13 +144,17 @@ export default function SheetHeaderStage({ embedded = false }: SheetHeaderStageP
       setError("Please select a sheet");
       return;
     }
+    if (preview && preview.rowCount > MAX_DATA_ROWS) {
+      setError(describeRowLimitExceeded(preview.rowCount));
+      return;
+    }
 
     setLoading(true);
     try {
       const arrayBuffer = await file?.arrayBuffer();
       const workbook = XLSX.read(arrayBuffer, { type: "array" });
       const df = parseXLSXSheet(workbook, selectedSheet, headerRowIndex, file?.name);
-      setData(df);
+      if (!setData(df)) return;
       setStage(3);
     } catch (err: any) {
       setError(err.message || "Failed to parse sheet");
@@ -161,27 +170,27 @@ export default function SheetHeaderStage({ embedded = false }: SheetHeaderStageP
 
       {shouldShowSheetPicker && (
         <div className="mb-8">
-          <h3 className="text-lg font-medium mb-3">1. Select Data Sheet</h3>
+          <h3 className="text-base font-semibold mb-3">Which sheet holds the data?</h3>
           {sheets.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {sheets.map((sheet) => (
-                <div
+                <button type="button" aria-pressed={selectedSheet === sheet.name}
                   key={sheet.name}
                   onClick={() => setSelectedSheet(sheet.name)}
-                  className={`p-4 border rounded-lg cursor-pointer ${selectedSheet === sheet.name ? "border-blue-500 bg-blue-50" : "border-gray-200 hover:border-blue-300"} ${sheet.isLikelyDictionary ? "opacity-60" : ""}`}
+                  className={`p-4 border text-left rounded-xl ${selectedSheet === sheet.name ? "border-blue-300 bg-blue-50" : "border-gray-200 hover:border-blue-300"} focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600`}
                 >
                   <div className="flex justify-between items-center mb-1">
                     <span className="font-medium text-gray-900">{sheet.name}</span>
                     {sheet.isLikelyDictionary && (
                       <span className="text-xs bg-gray-200 text-gray-700 px-2 py-1 rounded">
-                        Dictionary?
+                        Looks like a dictionary
                       </span>
                     )}
                   </div>
                   <div className="text-sm text-gray-500">
-                    {sheet.rowCount} rows x {sheet.colCount} columns
+                    {sheet.rowCount.toLocaleString()} × {sheet.colCount.toLocaleString()}
                   </div>
-                </div>
+                </button>
               ))}
             </div>
           ) : (
@@ -193,28 +202,23 @@ export default function SheetHeaderStage({ embedded = false }: SheetHeaderStageP
       )}
 
       <div className="mb-8">
-        <h3 className="text-lg font-medium mb-3">2. Confirm Header Row</h3>
+        <h3 className="text-base font-semibold mb-3">Click the row that contains column names</h3>
         <p className="text-sm text-gray-600 mb-4">
           Pick the row that holds your column names - usually row 1. Use the preview below to check that the first data rows line up under the right headers.
         </p>
-        <input
-          type="number"
-          min="1"
-          value={displayedHeaderRow}
-          onChange={(e) => {
-            const excelRow = parseInt(e.target.value, 10);
-            setHeaderRowIndex(Number.isFinite(excelRow) && excelRow > 0 ? excelRow - 1 : 0);
-          }}
-          data-testid="header-row-selector"
-          className="border border-gray-300 rounded px-3 py-2 w-32"
-        />
+        <div className="mb-3 flex items-center gap-2"><span className="text-sm font-medium text-gray-700">Header row</span><button type="button" aria-label="Previous row" disabled={headerRowIndex <= 0} onClick={() => setHeaderRowIndex(Math.max(0, headerRowIndex - 1))} className="h-9 w-9 rounded-lg border border-gray-300 disabled:opacity-40">−</button><output data-testid="header-row-selector" className="min-w-10 text-center text-sm font-semibold">{displayedHeaderRow}</output><button type="button" aria-label="Next row" disabled={Boolean(preview && headerRowIndex >= preview.rawRows.length - 1)} onClick={() => setHeaderRowIndex(headerRowIndex + 1)} className="h-9 w-9 rounded-lg border border-gray-300 disabled:opacity-40">+</button></div>
+        {preview && preview.rowCount > MAX_DATA_ROWS && (
+          <div className="mt-3 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700" role="alert">
+            {describeRowLimitExceeded(preview.rowCount)}
+          </div>
+        )}
         <p className="mt-2 text-xs text-gray-500">
           Most files use Excel row 1. Choose another row only if your sheet has title notes or blank rows above the headers.
         </p>
         {preview && (
           <div className="mt-4 rounded-lg border border-gray-200 bg-white p-4 text-sm">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-              <strong>Preview using row {displayedHeaderRow} as headers</strong>
+              <strong>Preview · select a header row</strong>
               <span className="text-xs text-gray-500">{preview.rowCount} rows x {preview.colCount} columns</span>
             </div>
             {preview.rowCount > LARGE_N_NOTICE_THRESHOLD && (
@@ -229,7 +233,7 @@ export default function SheetHeaderStage({ embedded = false }: SheetHeaderStageP
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
-                    {preview.headers.map((header, index) => (
+                    <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700">Row</th>{preview.headers.map((header, index) => (
                       <th key={`${header}-${index}`} className="px-2 py-2 text-left text-xs font-semibold text-gray-700">
                         {header}
                       </th>
@@ -237,13 +241,9 @@ export default function SheetHeaderStage({ embedded = false }: SheetHeaderStageP
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {preview.rows.map((row, rowIndex) => (
-                    <tr key={rowIndex}>
-                      {preview.headers.map((_, colIndex) => (
-                        <td key={colIndex} className="px-2 py-1 text-xs text-gray-700">
-                          {cellText(row[colIndex])}
-                        </td>
-                      ))}
+                  {preview.rawRows.map((row, rowIndex) => (
+                    <tr key={rowIndex} className={rowIndex === headerRowIndex ? "border-l-2 border-blue-600 bg-blue-50" : rowIndex < headerRowIndex ? "bg-gray-100 text-gray-500" : ""}>
+                      <td className="px-2 py-1"><button type="button" aria-pressed={rowIndex === headerRowIndex} aria-label={`Use row ${rowIndex + 1} as header`} onClick={() => setHeaderRowIndex(rowIndex)} className="font-medium text-blue-700 underline">{rowIndex + 1}</button></td>{preview.headers.map((_, colIndex) => <td key={colIndex} className={`px-2 py-1 text-xs ${rowIndex < headerRowIndex ? "text-gray-500" : "text-gray-700"}`}>{cellText(row[colIndex])}</td>)}
                     </tr>
                   ))}
                 </tbody>
@@ -257,6 +257,7 @@ export default function SheetHeaderStage({ embedded = false }: SheetHeaderStageP
         )}
       </div>
 
+      {preview && <p className="mb-3 text-xs text-gray-600">{preview.rowCount.toLocaleString()} data rows · {preview.colCount.toLocaleString()} columns will be imported</p>}
       <div className="flex justify-between">
         <button
           onClick={() => setStage(1)}
@@ -267,10 +268,10 @@ export default function SheetHeaderStage({ embedded = false }: SheetHeaderStageP
         <button
           onClick={handleNext}
           data-testid="header-row-confirm"
-          disabled={loading || (!isCSV && !selectedSheet)}
+          disabled={loading || (!isCSV && !selectedSheet) || Boolean(preview && preview.rowCount > MAX_DATA_ROWS)}
           className="px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
         >
-          {loading ? "Processing..." : "Confirm header row"}
+          {loading ? "Processing..." : "Looks right"}
         </button>
       </div>
     </div>

@@ -1,12 +1,14 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import JSZip from 'jszip';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import FormatExportStage from './FormatExportStage';
+import FormatExportStage, { getUniqueZipFilename } from './FormatExportStage';
 import { useStore } from '../../store';
 import { pyodideClient } from '../../workers/pyodide.client';
 import { exportDocx } from '../../core/export/docx';
 import { vegaLiteSpecToPng } from '../../core/export/vegaRender';
 import { APP_VERSION } from '../../core/appVersion';
+import { journalRulesets } from '../../core/format/formatTable';
+import { buildDataQualityPrintHtml } from '../../core/export/dataQualityExport';
 
 vi.mock('../../core/export/docx', () => ({
   exportDocx: vi.fn(async () => new Blob(['docx'])),
@@ -208,42 +210,77 @@ describe('FormatExportStage', () => {
     URL.revokeObjectURL = vi.fn();
   });
 
-  it('renders a Back button that returns to Stage 7', () => {
+  it('renders a Back to Statistical review action that returns to Stage 7', () => {
     seedExportStore();
     render(<FormatExportStage />);
 
-    const backBtn = screen.getByRole('button', { name: 'Back' });
+    const backBtn = screen.getByRole('button', { name: 'Back to Modeling' });
     expect(backBtn).toBeDefined();
 
     fireEvent.click(backBtn);
 
     const state = useStore.getState();
-    expect(state.stage).toBe(7);
+    expect(state.stage).toBe(8);
+  });
+
+  it('shows journal card summaries derived from journal ruleset fields', () => {
+    seedExportStore();
+    render(<FormatExportStage />);
+
+    const rules = journalRulesets.EasyTableOne_Ruleset.journals;
+    for (const journal of rules) {
+      const label = journal.journal_id === 'GENERIC' ? 'Standard / Generic' : journal.journal_id === 'NEJM' ? 'NEJM' : journal.journal_id === 'JAMA' ? 'JAMA' : journal.display_name;
+      const card = screen.getByRole('radio', { name: new RegExp(label) });
+      expect(card).toBeDefined();
+      if (journal.journal_id === 'JAMA') expect(screen.getByText(/P values without a leading zero/)).toBeDefined();
+      if (journal.journal_id === 'LANCET') expect(screen.getByText(new RegExp(journal.p_value_formatting.threshold_low.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))).toBeDefined();
+    }
+  });
+
+  it('counts changed override fields and clears them when switching journals', () => {
+    seedExportStore();
+    const plan = useStore.getState().plan!;
+    useStore.setState({ plan: { ...plan, userOverrides: { numberFormat: { decimalPlaces: 2, thousandSeparator: false }, iqrDelimiter: ' to ' } } as any });
+    render(<FormatExportStage />);
+
+    expect(screen.getByText('3 changed')).toBeDefined();
+    const overrideSummary = screen.getByText('Override individual settings', { exact: false });
+    const overrideDetails = overrideSummary.closest('details')!;
+    expect(overrideDetails.className).toContain('col-span-full');
+    expect(screen.getByTestId('export-left-column').contains(overrideDetails)).toBe(false);
+    fireEvent.click(overrideSummary);
+    expect(overrideDetails.open).toBe(true);
+    fireEvent.click(screen.getByRole('radio', { name: /JAMA/ }));
+    expect(useStore.getState().plan?.userOverrides).toBeUndefined();
+    expect(screen.queryByText('3 changed')).toBeNull();
   });
 
   it('renders journal selection, preview, checkbox-model downloads, but not diagnostics review panel', () => {
     seedExportStore();
     render(<FormatExportStage />);
 
-    expect(screen.getByLabelText('Select Journal Style')).toBeDefined();
+    expect(screen.getByRole('radiogroup', { name: 'Journal style' })).toBeDefined();
+    expect(screen.getByRole('radio', { name: /NEJM/ })).toBeDefined();
 
     const checkbox = screen.getByRole('checkbox', { name: /Diagnostic plots as supplementary figures/i }) as HTMLInputElement;
     expect(checkbox.checked).toBe(false);
     expect(screen.getByRole('checkbox', { name: /EDA report appendix/i })).toBeDefined();
     expect(screen.getByRole('button', { name: 'Download Word (.docx)' })).toBeDefined();
     expect(screen.queryByText('Download Word with plots (.docx)')).toBeNull();
-    expect(screen.getByText(/Download All/)).toBeDefined();
+    expect(screen.getAllByText(/Download All/).length).toBeGreaterThan(0);
     expect(screen.getByText('Download CSV')).toBeDefined();
     expect(screen.getByText('Download Excel (.xlsx)')).toBeDefined();
     expect(screen.getByText('Full report (single document)')).toBeDefined();
     expect(screen.getByRole('button', { name: 'Download report (.html)' })).toBeDefined();
     expect(screen.getByRole('button', { name: 'Download source (.md + figures)' })).toBeDefined();
     expect(screen.getByRole('button', { name: 'Print / Save PDF' })).toBeDefined();
-    expect(screen.getByText('Diagnostics (CSV/JSON)')).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Diagnostics CSV' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Diagnostics JSON' })).toBeDefined();
     expect(screen.getByText('Reproducible Python (.py)')).toBeDefined();
     expect(screen.getByText('Data quality report (.md)')).toBeDefined();
     expect(screen.getByText('Data quality report (.docx)')).toBeDefined();
-    expect(screen.getByText('Data quality report (PDF)')).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Data quality report — print / save as PDF' })).toBeDefined();
+    expect(screen.getByText("Opens a print view; choose 'Save as PDF' in your browser.")).toBeDefined();
     expect(screen.getByText('EDA report (.html)')).toBeDefined();
     expect(screen.getByRole('checkbox', { name: /Modeling report appendix/i })).toBeDefined();
     expect(screen.getByText('Modeling report (.md)')).toBeDefined();
@@ -260,24 +297,24 @@ describe('FormatExportStage', () => {
     expect(screen.queryByText('toggle-diagnostics')).toBeNull();
   });
 
-  it('renders Live Preview before Export Options', () => {
+  it('renders Live Preview before Downloads', () => {
     seedExportStore();
     render(<FormatExportStage />);
 
     const preview = screen.getByText('Live Preview');
-    const options = screen.getByText('Export Options');
+    const options = screen.getByRole('heading', { name: 'Downloads' });
     expect(
       Boolean(preview.compareDocumentPosition(options) & Node.DOCUMENT_POSITION_FOLLOWING),
     ).toBe(true);
   });
 
-  it('renders Results Summary between Live Preview and Export Options', () => {
+  it('renders Results Summary between Live Preview and Downloads', () => {
     seedExportStore();
     render(<FormatExportStage />);
 
     const preview = screen.getByText('Live Preview');
     const summary = screen.getByText('Results Summary');
-    const options = screen.getByText('Export Options');
+    const options = screen.getByRole('heading', { name: 'Downloads' });
 
     expect(Boolean(preview.compareDocumentPosition(summary) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
     expect(Boolean(summary.compareDocumentPosition(options) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
@@ -288,10 +325,7 @@ describe('FormatExportStage', () => {
     render(<FormatExportStage />);
 
     const sections = [
-      { name: 'Select Journal Style', testId: 'select-journal-style-content' },
-      { name: 'Journal Formatting Overrides', testId: 'journal-formatting-overrides-content' },
       { name: 'Live Preview', testId: 'live-preview-content' },
-      { name: 'Export Options', testId: 'export-options-content' },
       { name: 'Results Summary', testId: 'results-summary-content' },
     ];
 
@@ -468,7 +502,7 @@ describe('FormatExportStage', () => {
     seedExportStore();
     render(<FormatExportStage />);
 
-    const fullReportCard = screen.getByText('Full report (single document)').closest('div.mb-5') as HTMLElement;
+    const fullReportCard = screen.getByTestId('what-to-include');
     const table1 = within(fullReportCard).getByRole('checkbox', { name: 'Table 1 section' }) as HTMLInputElement;
     const dataQuality = within(fullReportCard).getByRole('checkbox', { name: 'Data quality section' }) as HTMLInputElement;
     const eda = within(fullReportCard).getByRole('checkbox', { name: 'EDA section' }) as HTMLInputElement;
@@ -594,7 +628,92 @@ describe('FormatExportStage', () => {
     seedExportStore();
     render(<FormatExportStage />);
 
-    expect(screen.getByRole('button', { name: /Download All/ })).toBeDefined();
+    expect(screen.getAllByRole('button', { name: /Download All/ }).length).toBeGreaterThan(0);
+  });
+
+  it('creates one Download All zip containing the manifest and export files', async () => {
+    seedExportStore();
+    render(<FormatExportStage />);
+
+    fireEvent.click(screen.getByTestId('download-csv'));
+    await waitFor(() => expect(URL.createObjectURL).toHaveBeenCalledTimes(1));
+    const individualCsv = (URL.createObjectURL as any).mock.calls[0][0] as Blob;
+    const individualCsvText = await individualCsv.text();
+    fireEvent.click(screen.getByTestId('download-all'));
+    await waitFor(() => expect(URL.createObjectURL).toHaveBeenCalledTimes(2));
+    const archive = await JSZip.loadAsync((URL.createObjectURL as any).mock.calls[1][0] as Blob);
+    const csvName = Object.keys(archive.files).find((name) => name.endsWith('.csv'));
+    expect(csvName).toBeDefined();
+    expect(await archive.file(csvName!)!.async('string')).toBe(individualCsvText);
+    expect(archive.file('MANIFEST.txt')).toBeDefined();
+    expect(Object.keys(archive.files)).toEqual(expect.arrayContaining([
+      'MANIFEST.txt',
+      'reproducibility.json',
+      'diagnostics.csv',
+      'diagnostics.json',
+      'analysis_history.py',
+      'data_quality_report.md',
+      'data_quality_report.docx',
+      'data_quality_report_print.html',
+      'methods_summary.md',
+      'methods_summary.docx',
+      'methods_rationale_explainer.md',
+      'methods_rationale_explainer.docx',
+    ]));
+  });
+
+  it('uses the pure print HTML builder for the unchanged print-window path', () => {
+    seedExportStore();
+    const document = { open: vi.fn(), write: vi.fn(), close: vi.fn() };
+    vi.spyOn(window, 'open').mockReturnValue({ document } as unknown as Window);
+    render(<FormatExportStage />);
+    fireEvent.click(screen.getByTestId('download-data-quality-pdf'));
+    expect(document.write).toHaveBeenCalledWith(buildDataQualityPrintHtml(
+      useStore.getState().dataQualityRecords,
+      useStore.getState().schema,
+      useStore.getState().plan,
+      APP_VERSION,
+      { qaReport: useStore.getState().qaReport, edaResults: null },
+    ));
+  });
+
+  it('keeps Download All alive and records an individual builder failure in its manifest', async () => {
+    seedExportStore();
+    vi.mocked(exportDocx).mockRejectedValueOnce(new Error('forced builder failure'));
+    render(<FormatExportStage />);
+
+    fireEvent.click(screen.getByTestId('download-all'));
+    await waitFor(() => expect(URL.createObjectURL).toHaveBeenCalledTimes(1));
+    const archive = await JSZip.loadAsync((URL.createObjectURL as any).mock.calls[0][0] as Blob);
+    const manifest = await archive.file('MANIFEST.txt')!.async('string');
+    expect(manifest).toContain('Table 1 DOCX: Failed to export DOCX.');
+    expect(archive.file('reproducibility.json')).toBeDefined();
+  });
+
+  it('renames colliding Download All filenames and records the rename in the manifest', async () => {
+    const zip = new JSZip();
+    const usedNames = new Set<string>();
+    const captured = [
+      { filename: 'report.md', blob: new Blob(['first']) },
+      { filename: 'report.md', blob: new Blob(['second']) },
+    ];
+    const renamed: Array<{ original: string; filename: string }> = [];
+    for (const file of captured) {
+      const filename = getUniqueZipFilename(file.filename, usedNames);
+      if (filename !== file.filename) renamed.push({ original: file.filename, filename });
+      zip.file(filename, file.blob);
+    }
+    zip.file('MANIFEST.txt', [
+      'Files:',
+      ...['report.md', 'report (2).md'].map((filename) => `- ${filename}`),
+      '',
+      'Renamed:',
+      ...renamed.map((item) => `- ${item.original} -> ${item.filename}`),
+    ].join('\n'));
+    const archive = await JSZip.loadAsync(await zip.generateAsync({ type: 'blob' }));
+    expect(archive.file('report.md')).toBeDefined();
+    expect(archive.file('report (2).md')).toBeDefined();
+    expect(await archive.file('MANIFEST.txt')!.async('string')).toContain('- report.md -> report (2).md');
   });
 
   it('toggles per-variable missing-data rows into the live preview', () => {
@@ -713,7 +832,7 @@ describe('FormatExportStage', () => {
     await waitFor(() => expect(URL.createObjectURL).toHaveBeenCalledTimes(2));
     expect(pyodideClient.renderPublicationFigure).toHaveBeenCalledTimes(2);
 
-    fireEvent.change(screen.getByLabelText('Select Journal Style'), { target: { value: 'JAMA' } });
+    fireEvent.click(screen.getByRole('radio', { name: /JAMA/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Download report (.html)' }));
     await waitFor(() => expect(URL.createObjectURL).toHaveBeenCalledTimes(3));
     expect(pyodideClient.renderPublicationFigure).toHaveBeenCalledTimes(4);

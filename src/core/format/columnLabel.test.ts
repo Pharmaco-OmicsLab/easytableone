@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getColumnDisplayLabel } from './columnLabel';
+import { getColumnDiagnosticLabel, getColumnDisplayLabel } from './columnLabel';
 
 describe('getColumnDisplayLabel', () => {
   it('prefers displayLabel over label and raw', () => {
@@ -32,5 +32,15 @@ describe('getColumnDisplayLabel', () => {
 
   it('treats empty/whitespace-only displayLabel as missing', () => {
     expect(getColumnDisplayLabel({ name: '[b1]GA', displayLabel: '   ' })).toBe('GA');
+  });
+});
+
+describe('getColumnDiagnosticLabel', () => {
+  it('keeps the raw key alongside a distinct diagnostic display label (D98)', () => {
+    expect(getColumnDiagnosticLabel({ name: 'Cholesterol_TP_T0', displayLabel: 'Total cholesterol at admission' } as any))
+      .toBe('Total cholesterol at admission (Cholesterol_TP_T0)');
+    expect(getColumnDiagnosticLabel({ name: 'Cholesterol_TP_T0' } as any)).toBe('Cholesterol_TP_T0');
+    expect(getColumnDiagnosticLabel({ name: 'Cholesterol_TP_T0', displayLabel: 'Cholesterol_TP_T0' } as any))
+      .toBe('Cholesterol_TP_T0');
   });
 });

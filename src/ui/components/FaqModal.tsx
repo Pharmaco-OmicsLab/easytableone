@@ -45,12 +45,12 @@ export default function FaqModal() {
         if (e.target === e.currentTarget) close();
       }}
     >
-      <div ref={modalRef} tabIndex={-1} className="relative mx-4 w-full max-w-5xl rounded-xl bg-white p-8 shadow-xl">
+      <div ref={modalRef} tabIndex={-1} className="relative mx-4 max-h-[80vh] w-full max-w-5xl overflow-auto rounded-2xl bg-white p-8 shadow-xl">
         <button
           id="faq-close-button"
           type="button"
           onClick={close}
-          className="absolute right-4 top-4 text-gray-400 transition-colors hover:text-gray-700"
+          className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-lg text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
           aria-label="Close FAQ"
         >
           <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">

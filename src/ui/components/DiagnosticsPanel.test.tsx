@@ -206,4 +206,184 @@ describe('DiagnosticsPanel (Round 8e)', () => {
     expect(tooltipText).toContain("SMD is the absolute standardized difference");
     expect(tooltipText).toContain("conventionally considered imbalanced");
   });
+
+  it('Phase 50 R3: renders post-hoc caveat under post-hoc pairs', () => {
+    const caveatResults: StatisticalResults = {
+      ...mockResults,
+      perVariable: [{
+        ...mockResults.perVariable[0],
+        test: { name: 'ANOVA', statistic: 12.5, pValue: 0.001 },
+        postHoc: {
+          reason: 'ANOVA significant (p=0.001); 3 groups',
+          correction: 'tukey',
+          method: 'tukey_hsd',
+          pairs: [{ groupA: '1.0', groupB: '2', pValueRaw: 0.002, pValueCorrected: 0.002, significant: true }],
+          caveat: 'Tukey HSD assumes equal variances, which the Levene/Brown-Forsythe check did not support for this variable; pairwise P values should be interpreted with caution.',
+        },
+      }],
+      groups: [{ name: '1.0', n: 48 }, { name: '2', n: 89 }, { name: '3', n: 50 }],
+    };
+
+    render(
+      <DiagnosticsPanel
+        results={caveatResults}
+        schema={mockSchema}
+        groupingVariable="GroupVar"
+      />
+    );
+
+    expect(screen.getByText(/Tukey HSD assumes equal variances, which the Levene\/Brown-Forsythe check did not support/)).toBeDefined();
+  });
+
+  it('Phase 50 R3: renders unequal-variance warning when contradictionReason is unequal_variance', () => {
+    const unequalVarianceResults: StatisticalResults = {
+      ...mockResults,
+      perVariable: [{
+        ...mockResults.perVariable[0],
+        test: {
+          name: 'ANOVA',
+          statistic: 2.1,
+          pValue: 0.12,
+          auxiliary: {
+            assumptionCheckContradicted: 'true',
+            contradictionReason: 'unequal_variance',
+            levenePValue: 0.004,
+          },
+        },
+      }],
+      groups: [{ name: '1.0', n: 48 }, { name: '2', n: 89 }, { name: '3', n: 50 }],
+    };
+
+    useStore.setState({
+      plan: {
+        variableConfig: { Symptom: { label: 'Symptom', treatAs: 'continuous' } },
+        testOverrides: [{ variable: 'Symptom', method: 'oneway_anova', timestamp: '2026-09-28T00:00:00.000Z' }],
+      },
+    } as any);
+
+    render(
+      <DiagnosticsPanel
+        results={unequalVarianceResults}
+        schema={mockSchema}
+        groupingVariable="GroupVar"
+      />
+    );
+
+    expect(screen.getByText(/Levene\/Brown-Forsythe p = 0.00 indicates unequal group variances/)).toBeDefined();
+    expect(screen.getByText(/Welch's ANOVA is the indicated alternative but is not available in this release/)).toBeDefined();
+    expect(screen.queryByText(/Shapiro–Wilk/)).toBeNull();
+  });
+
+  it('Phase 50 R4: ordinal rank option appears only for categorical_ordinal rows with >= 3 levels (D104(b))', () => {
+    const ordinalSchema: Schema = {
+      columns: [
+        mockSchema.columns[0],
+        {
+          name: 'NYHA',
+          inferredType: 'categorical_ordinal',
+          confirmedType: 'categorical_ordinal',
+          cardinalityTier: 'ok',
+          levels: [
+            { code: 1, label: 'I' },
+            { code: 2, label: 'II' },
+            { code: 3, label: 'III' },
+          ],
+        },
+        {
+          name: 'NominalVar',
+          inferredType: 'categorical_nominal',
+          confirmedType: 'categorical_nominal',
+          cardinalityTier: 'ok',
+          levels: [
+            { code: 1, label: 'A' },
+            { code: 2, label: 'B' },
+            { code: 3, label: 'C' },
+          ],
+        },
+        {
+          name: 'TwoLevelOrdinal',
+          inferredType: 'categorical_ordinal',
+          confirmedType: 'categorical_ordinal',
+          cardinalityTier: 'ok',
+          levels: [
+            { code: 1, label: 'Low' },
+            { code: 2, label: 'High' },
+          ],
+        },
+      ],
+    };
+
+    const ordinalResults: StatisticalResults = {
+      perVariable: [
+        {
+          variable: 'NYHA',
+          summaryByGroup: {
+            '1.0': { counts: { '1': 10, '2': 15, '3': 23 }, percentages: { '1': 20.8, '2': 31.3, '3': 47.9 }, n: 48 },
+            '2': { counts: { '1': 30, '2': 30, '3': 29 }, percentages: { '1': 33.7, '2': 33.7, '3': 32.6 }, n: 89 },
+          },
+          overallSummary: { counts: { '1': 40, '2': 45, '3': 52 }, percentages: { '1': 29.2, '2': 32.8, '3': 38.0 }, n: 137 },
+          test: { name: 'Chi-square', statistic: 2.5, pValue: 0.28 },
+          notes: [],
+        },
+        {
+          variable: 'NominalVar',
+          summaryByGroup: {
+            '1.0': { counts: { '1': 10, '2': 15, '3': 23 }, percentages: { '1': 20.8, '2': 31.3, '3': 47.9 }, n: 48 },
+            '2': { counts: { '1': 30, '2': 30, '3': 29 }, percentages: { '1': 33.7, '2': 33.7, '3': 32.6 }, n: 89 },
+          },
+          overallSummary: { counts: { '1': 40, '2': 45, '3': 52 }, percentages: { '1': 29.2, '2': 32.8, '3': 38.0 }, n: 137 },
+          test: { name: 'Chi-square', statistic: 2.5, pValue: 0.28 },
+          notes: [],
+        },
+        {
+          variable: 'TwoLevelOrdinal',
+          summaryByGroup: {
+            '1.0': { counts: { '1': 20, '2': 28 }, percentages: { '1': 41.7, '2': 58.3 }, n: 48 },
+            '2': { counts: { '1': 45, '2': 44 }, percentages: { '1': 50.6, '2': 49.4 }, n: 89 },
+          },
+          overallSummary: { counts: { '1': 65, '2': 72 }, percentages: { '1': 47.4, '2': 52.6 }, n: 137 },
+          test: { name: 'Chi-square', statistic: 1.0, pValue: 0.32 },
+          notes: [],
+        },
+      ],
+      groups: [{ name: '1.0', n: 48 }, { name: '2', n: 89 }],
+      totalN: 137,
+      computeMetadata: { libVersions: {}, seed: 42 },
+    };
+
+    useStore.setState({
+      plan: {
+        variableConfig: {
+          NYHA: { label: 'NYHA', treatAs: 'categorical_ordinal', levelOrder: [1, 2, 3] },
+          NominalVar: { label: 'NominalVar', treatAs: 'categorical_nominal' },
+          TwoLevelOrdinal: { label: 'TwoLevelOrdinal', treatAs: 'categorical_ordinal', levelOrder: [1, 2] },
+        },
+      },
+    } as any);
+
+    const { container } = render(
+      <DiagnosticsPanel
+        results={ordinalResults}
+        schema={ordinalSchema}
+        groupingVariable="GroupVar"
+      />
+    );
+
+    const selects = container.querySelectorAll('select');
+    // NYHA select should have ordinal_rank
+    const nyhaSelect = selects[0];
+    const nyhaOptions = Array.from(nyhaSelect.options).map((o) => o.value);
+    expect(nyhaOptions).toContain('ordinal_rank');
+    expect(screen.getByText('Mann-Whitney U (ordered categories)')).toBeDefined();
+
+    // NominalVar select should NOT have ordinal_rank
+    const nominalSelect = selects[1];
+    const nominalOptions = Array.from(nominalSelect.options).map((o) => o.value);
+    expect(nominalOptions).not.toContain('ordinal_rank');
+
+    // TwoLevelOrdinal select should NOT have ordinal_rank
+    const twoLevelSelect = selects[2];
+    const twoLevelOptions = Array.from(twoLevelSelect.options).map((o) => o.value);
+    expect(twoLevelOptions).not.toContain('ordinal_rank');
+  });
 });

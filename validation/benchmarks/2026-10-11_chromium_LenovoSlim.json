@@ -1,0 +1,666 @@
+{
+  "kind": "environment-smoke",
+  "generatedAt": "2026-10-11T20:12:25.113Z",
+  "browser": {
+    "name": "chromium",
+    "version": "147.0.7727.15"
+  },
+  "machine": {
+    "hostname": "LenovoSlim",
+    "cpuModel": "AMD Ryzen 7 8845HS w/ Radeon 780M Graphics",
+    "cores": 16,
+    "totalMemoryBytes": 67975368704,
+    "platform": "win32",
+    "release": "10.0.26200"
+  },
+  "protocol": {
+    "tableRepetitions": 5,
+    "fastModelRepetitions": 3,
+    "thoroughModelRepetitions": 1,
+    "warmCache": "second navigation in same fresh context"
+  },
+  "runs": [
+    {
+      "dataset": "HF",
+      "repetition": 1,
+      "rowCount": 299,
+      "inputColumnCount": 13,
+      "baselineVariableCount": 12,
+      "baselineVariables": [
+        "age",
+        "anaemia",
+        "creatinine_phosphokinase",
+        "diabetes",
+        "ejection_fraction",
+        "high_blood_pressure",
+        "platelets",
+        "serum_creatinine",
+        "serum_sodium",
+        "sex",
+        "smoking"
+      ],
+      "grouping": "DEATH_EVENT",
+      "modelOutcome": "DEATH_EVENT",
+      "modelPredictors": [
+        "age",
+        "anaemia",
+        "creatinine_phosphokinase",
+        "diabetes",
+        "ejection_fraction",
+        "high_blood_pressure",
+        "platelets",
+        "serum_creatinine",
+        "serum_sodium",
+        "sex",
+        "smoking"
+      ],
+      "sizeGateAppeared": false,
+      "sizeGateAcknowledged": false,
+      "status": "ok",
+      "stageReached": "complete",
+      "timings": {
+        "coldLoad_s": 14.3728701,
+        "warmLoad_s": 18.146620099999996,
+        "import_s": 0.29940179999999966,
+        "qaToPlan_s": 0.08758929999999963,
+        "stats_s": 0.5010994999999966,
+        "docxExport_s": 0.34554990000000546,
+        "baselineTable_s": 1.2336405000000015,
+        "modelFast_s": 65.5958177,
+        "modelThorough_s": 512.1439308999999
+      },
+      "memory": {
+        "coldLoad": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 17.1
+        },
+        "warmLoad": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 17.1
+        },
+        "import": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 17.1
+        },
+        "qa": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 17.1
+        },
+        "plan": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 17.1
+        },
+        "statistics": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 17.1
+        },
+        "export": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 17.1
+        },
+        "modelFast": {
+          "wasmPeakMB": 225.247232,
+          "jsHeapMB": 17.1
+        },
+        "modelThorough": {
+          "wasmPeakMB": 225.247232,
+          "jsHeapMB": 17.1
+        }
+      },
+      "coldLoadBytes": 58300526
+    },
+    {
+      "dataset": "HF",
+      "repetition": 2,
+      "rowCount": 299,
+      "inputColumnCount": 13,
+      "baselineVariableCount": 12,
+      "baselineVariables": [
+        "age",
+        "anaemia",
+        "creatinine_phosphokinase",
+        "diabetes",
+        "ejection_fraction",
+        "high_blood_pressure",
+        "platelets",
+        "serum_creatinine",
+        "serum_sodium",
+        "sex",
+        "smoking"
+      ],
+      "grouping": "DEATH_EVENT",
+      "modelOutcome": "DEATH_EVENT",
+      "modelPredictors": [
+        "age",
+        "anaemia",
+        "creatinine_phosphokinase",
+        "diabetes",
+        "ejection_fraction",
+        "high_blood_pressure",
+        "platelets",
+        "serum_creatinine",
+        "serum_sodium",
+        "sex",
+        "smoking"
+      ],
+      "sizeGateAppeared": false,
+      "sizeGateAcknowledged": false,
+      "status": "ok",
+      "stageReached": "complete",
+      "timings": {
+        "coldLoad_s": 19.320999399999973,
+        "warmLoad_s": 19.198869499999912,
+        "import_s": 0.29314789999998175,
+        "qaToPlan_s": 0.08047010000003502,
+        "stats_s": 0.46135149999998976,
+        "docxExport_s": 0.1800411000000313,
+        "baselineTable_s": 1.0150106000000378,
+        "modelFast_s": 76.65907660000003
+      },
+      "memory": {
+        "coldLoad": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "warmLoad": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "import": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "qa": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "plan": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "statistics": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "export": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "modelFast": {
+          "wasmPeakMB": 225.247232,
+          "jsHeapMB": 15.2
+        }
+      },
+      "coldLoadBytes": 58300526
+    },
+    {
+      "dataset": "HF",
+      "repetition": 3,
+      "rowCount": 299,
+      "inputColumnCount": 13,
+      "baselineVariableCount": 12,
+      "baselineVariables": [
+        "age",
+        "anaemia",
+        "creatinine_phosphokinase",
+        "diabetes",
+        "ejection_fraction",
+        "high_blood_pressure",
+        "platelets",
+        "serum_creatinine",
+        "serum_sodium",
+        "sex",
+        "smoking"
+      ],
+      "grouping": "DEATH_EVENT",
+      "modelOutcome": "DEATH_EVENT",
+      "modelPredictors": [
+        "age",
+        "anaemia",
+        "creatinine_phosphokinase",
+        "diabetes",
+        "ejection_fraction",
+        "high_blood_pressure",
+        "platelets",
+        "serum_creatinine",
+        "serum_sodium",
+        "sex",
+        "smoking"
+      ],
+      "sizeGateAppeared": false,
+      "sizeGateAcknowledged": false,
+      "status": "ok",
+      "stageReached": "complete",
+      "timings": {
+        "coldLoad_s": 20.38607759999996,
+        "warmLoad_s": 20.16387520000001,
+        "import_s": 0.20817910000006667,
+        "qaToPlan_s": 0.08220779999997467,
+        "stats_s": 0.4370115999999689,
+        "docxExport_s": 0.17485389999998732,
+        "baselineTable_s": 0.9022523999999976,
+        "modelFast_s": 78.73788219999999
+      },
+      "memory": {
+        "coldLoad": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "warmLoad": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "import": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "qa": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "plan": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "statistics": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "export": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "modelFast": {
+          "wasmPeakMB": 225.247232,
+          "jsHeapMB": 15.2
+        }
+      },
+      "coldLoadBytes": 58300526
+    },
+    {
+      "dataset": "HF",
+      "repetition": 4,
+      "rowCount": 299,
+      "inputColumnCount": 13,
+      "baselineVariableCount": 12,
+      "baselineVariables": [
+        "age",
+        "anaemia",
+        "creatinine_phosphokinase",
+        "diabetes",
+        "ejection_fraction",
+        "high_blood_pressure",
+        "platelets",
+        "serum_creatinine",
+        "serum_sodium",
+        "sex",
+        "smoking"
+      ],
+      "grouping": "DEATH_EVENT",
+      "modelOutcome": "DEATH_EVENT",
+      "modelPredictors": [
+        "age",
+        "anaemia",
+        "creatinine_phosphokinase",
+        "diabetes",
+        "ejection_fraction",
+        "high_blood_pressure",
+        "platelets",
+        "serum_creatinine",
+        "serum_sodium",
+        "sex",
+        "smoking"
+      ],
+      "sizeGateAppeared": false,
+      "sizeGateAcknowledged": false,
+      "status": "ok",
+      "stageReached": "complete",
+      "timings": {
+        "coldLoad_s": 19.340713100000052,
+        "warmLoad_s": 20.16061109999998,
+        "import_s": 0.22116610000003128,
+        "qaToPlan_s": 0.10082150000007824,
+        "stats_s": 0.9261837999999989,
+        "docxExport_s": 0.19629339999996592,
+        "baselineTable_s": 1.4444648000000742
+      },
+      "memory": {
+        "coldLoad": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "warmLoad": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "import": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "qa": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "plan": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "statistics": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "export": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        }
+      },
+      "coldLoadBytes": 58300526
+    },
+    {
+      "dataset": "HF",
+      "repetition": 5,
+      "rowCount": 299,
+      "inputColumnCount": 13,
+      "baselineVariableCount": 12,
+      "baselineVariables": [
+        "age",
+        "anaemia",
+        "creatinine_phosphokinase",
+        "diabetes",
+        "ejection_fraction",
+        "high_blood_pressure",
+        "platelets",
+        "serum_creatinine",
+        "serum_sodium",
+        "sex",
+        "smoking"
+      ],
+      "grouping": "DEATH_EVENT",
+      "modelOutcome": "DEATH_EVENT",
+      "modelPredictors": [
+        "age",
+        "anaemia",
+        "creatinine_phosphokinase",
+        "diabetes",
+        "ejection_fraction",
+        "high_blood_pressure",
+        "platelets",
+        "serum_creatinine",
+        "serum_sodium",
+        "sex",
+        "smoking"
+      ],
+      "sizeGateAppeared": false,
+      "sizeGateAcknowledged": false,
+      "status": "ok",
+      "stageReached": "complete",
+      "timings": {
+        "coldLoad_s": 20.423419400000014,
+        "warmLoad_s": 20.15253269999998,
+        "import_s": 0.2071390000000829,
+        "qaToPlan_s": 0.09029610000003595,
+        "stats_s": 0.9289081000000006,
+        "docxExport_s": 0.16137040000001435,
+        "baselineTable_s": 1.3877136000001338
+      },
+      "memory": {
+        "coldLoad": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "warmLoad": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "import": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "qa": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "plan": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "statistics": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "export": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        }
+      },
+      "coldLoadBytes": 58300526
+    },
+    {
+      "dataset": "Diabetes 20k",
+      "repetition": 1,
+      "rowCount": 20000,
+      "inputColumnCount": 30,
+      "baselineVariableCount": 19,
+      "baselineVariables": [
+        "time_in_hospital",
+        "num_lab_procedures",
+        "num_procedures",
+        "num_medications",
+        "number_outpatient",
+        "number_emergency",
+        "number_inpatient",
+        "number_diagnoses",
+        "race",
+        "gender",
+        "age",
+        "max_glu_serum",
+        "A1Cresult",
+        "metformin",
+        "insulin",
+        "change",
+        "diabetesMed",
+        "medical_specialty_grouped"
+      ],
+      "grouping": "readmitted",
+      "modelOutcome": "readmitted_30d",
+      "modelPredictors": [
+        "age",
+        "time_in_hospital",
+        "num_lab_procedures",
+        "num_medications",
+        "number_inpatient",
+        "number_emergency",
+        "number_diagnoses",
+        "A1Cresult",
+        "insulin",
+        "diabetesMed"
+      ],
+      "sizeGateAppeared": false,
+      "sizeGateAcknowledged": false,
+      "status": "timeout",
+      "stageReached": "modelThorough",
+      "timings": {
+        "coldLoad_s": 17.3396305,
+        "warmLoad_s": 17.145048,
+        "import_s": 0.8616316999999981,
+        "qaToPlan_s": 1.0494219000000011,
+        "stats_s": 24.573763700000004,
+        "docxExport_s": 0.5080371000000014,
+        "baselineTable_s": 26.992854400000006,
+        "modelFast_s": 634.376477
+      },
+      "memory": {
+        "coldLoad": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 18.2
+        },
+        "warmLoad": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 18.2
+        },
+        "import": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 18.2
+        },
+        "qa": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 18.2
+        },
+        "plan": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 18.2
+        },
+        "statistics": {
+          "wasmPeakMB": 324.4032,
+          "jsHeapMB": 18.2
+        },
+        "export": {
+          "wasmPeakMB": 324.4032,
+          "jsHeapMB": 18.2
+        },
+        "modelFast": {
+          "wasmPeakMB": 389.28384,
+          "jsHeapMB": 18.2
+        }
+      },
+      "coldLoadBytes": 58300526,
+      "error": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeEnabled\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: getByRole('button', { name: 'Run logistic regression' })\nExpected: enabled\nTimeout: 1800000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toBeEnabled\" with timeout 1800000ms\u001b[22m\n\u001b[2m  - waiting for getByRole('button', { name: 'Run logistic regression' })\u001b[22m\n"
+    },
+    {
+      "dataset": "Diabetes 20k",
+      "repetition": 2,
+      "rowCount": 20000,
+      "inputColumnCount": 30,
+      "baselineVariableCount": 19,
+      "baselineVariables": [
+        "time_in_hospital",
+        "num_lab_procedures",
+        "num_procedures",
+        "num_medications",
+        "number_outpatient",
+        "number_emergency",
+        "number_inpatient",
+        "number_diagnoses",
+        "race",
+        "gender",
+        "age",
+        "max_glu_serum",
+        "A1Cresult",
+        "metformin",
+        "insulin",
+        "change",
+        "diabetesMed",
+        "medical_specialty_grouped"
+      ],
+      "grouping": "readmitted",
+      "modelOutcome": "readmitted_30d",
+      "modelPredictors": [
+        "age",
+        "time_in_hospital",
+        "num_lab_procedures",
+        "num_medications",
+        "number_inpatient",
+        "number_emergency",
+        "number_diagnoses",
+        "A1Cresult",
+        "insulin",
+        "diabetesMed"
+      ],
+      "sizeGateAppeared": false,
+      "sizeGateAcknowledged": false,
+      "status": "error",
+      "stageReached": "modelFast",
+      "timings": {
+        "coldLoad_s": 20.37249040000001,
+        "warmLoad_s": 18.171656299999913,
+        "import_s": 0.9480753000001423,
+        "qaToPlan_s": 1.4733474000000861,
+        "stats_s": 27.293307399999815,
+        "docxExport_s": 0.194626200000057,
+        "baselineTable_s": 29.909356300000102
+      },
+      "memory": {
+        "coldLoad": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "warmLoad": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "import": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "qa": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "plan": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "statistics": {
+          "wasmPeakMB": 324.4032,
+          "jsHeapMB": 15.2
+        },
+        "export": {
+          "wasmPeakMB": 324.4032,
+          "jsHeapMB": 15.2
+        }
+      },
+      "coldLoadBytes": 58300526,
+      "error": "locator.click: Target page, context or browser has been closed\nCall log:\n\u001b[2m  - waiting for getByRole('button', { name: 'Clear all', exact: true })\u001b[22m\n"
+    },
+    {
+      "dataset": "Synthetic 150k",
+      "repetition": 1,
+      "rowCount": 150000,
+      "inputColumnCount": 30,
+      "baselineVariableCount": 19,
+      "baselineVariables": [
+        "time_in_hospital",
+        "num_lab_procedures",
+        "num_procedures",
+        "num_medications",
+        "number_outpatient",
+        "number_emergency",
+        "number_inpatient",
+        "number_diagnoses",
+        "race",
+        "gender",
+        "age",
+        "max_glu_serum",
+        "A1Cresult",
+        "metformin",
+        "insulin",
+        "change",
+        "diabetesMed",
+        "medical_specialty_grouped"
+      ],
+      "grouping": "readmitted",
+      "modelOutcome": null,
+      "modelPredictors": [],
+      "sizeGateAppeared": false,
+      "sizeGateAcknowledged": false,
+      "status": "timeout",
+      "stageReached": "import",
+      "timings": {
+        "coldLoad_s": 18.396098800000267,
+        "warmLoad_s": 20.27014639999997
+      },
+      "memory": {
+        "coldLoad": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "warmLoad": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        }
+      },
+      "coldLoadBytes": 58300526,
+      "error": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: getByTestId('schema-proceed')\nExpected: visible\nTimeout: 900000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" with timeout 900000ms\u001b[22m\n\u001b[2m  - waiting for getByTestId('schema-proceed')\u001b[22m\n"
+    }
+  ]
+}

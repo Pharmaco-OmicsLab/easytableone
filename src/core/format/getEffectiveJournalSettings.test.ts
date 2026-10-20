@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { getEffectiveJournalSettings } from "./getEffectiveJournalSettings";
-import { journalRulesets } from "./formatTable";
+import { formatPValue, journalRulesets } from "./formatTable";
 
 describe("getEffectiveJournalSettings", () => {
   it("returns base journal configuration when no overrides are passed", () => {
@@ -41,6 +41,24 @@ describe("getEffectiveJournalSettings", () => {
     expect(config.p_value_formatting.conditional_decimals).toEqual([]);
     // Should preserve italicize_p from NEJM (false)
     expect(config.p_value_formatting.italicize_p).toBe(false);
+  });
+
+  it("uses fixed P-value decimals for an explicit NEJM default-decimal override", () => {
+    const overridden = getEffectiveJournalSettings('NEJM', { pValueSignificantDigits: 3 });
+    const defaultConfig = getEffectiveJournalSettings('NEJM');
+
+    expect(overridden.p_value_formatting.conditional_decimals).toEqual([]);
+    expect(formatPValue(0.0431, overridden.p_value_formatting)).toBe("0.043");
+    expect(formatPValue(0.1048, overridden.p_value_formatting)).toBe("0.105");
+    expect(formatPValue(0.035, overridden.p_value_formatting)).toBe("0.035");
+    expect(formatPValue(0.0431, defaultConfig.p_value_formatting)).toBe("0.04");
+    expect(formatPValue(0.1048, defaultConfig.p_value_formatting)).toBe("0.10");
+    expect(formatPValue(0.035, defaultConfig.p_value_formatting)).toBe("0.04");
+  });
+
+  it("preserves JAMA's conditional display when no P-value override is set", () => {
+    const config = getEffectiveJournalSettings('JAMA');
+    expect(formatPValue(0.995, config.p_value_formatting)).toBe("> .99");
   });
 
   it("applies text template overrides", () => {

@@ -364,6 +364,54 @@ describe("runChecks and CHECK_REGISTRY", () => {
     expect(advisory?.category).toBe("beautify");
   });
 
+  it("smallCategoryLevel reports rare categorical levels as one advisory per variable", () => {
+    const schema = { columns: [{ name: "rare", displayLabel: "Rare category", confirmedType: "categorical_nominal", levels: [
+      { code: "A", label: "Alpha" }, { code: "B", label: "Beta" }, { code: "C", label: "Gamma" },
+    ] }] };
+    const rows = [...Array(256).fill(["A"]), ...Array(40).fill(["B"]), ...Array(3).fill(["C"])] as unknown[][];
+    const findings = runChecks("data-review", { schema: schema as any, data: { columns: [{ name: "rare" }], rows, meta: dummyMeta } as any });
+    const finding = findings.find((f) => f.checkId === "smallCategoryLevel_rare");
+    expect(findings.filter((f) => f.checkId === "smallCategoryLevel_rare")).toHaveLength(1);
+    expect(finding?.tier).toBe("advisory");
+    expect(finding?.detail).toContain("Variable 'Rare category': level 'Gamma' has n = 3");
+    expect(finding?.remedy).toContain("This is advisory; the analysis is unchanged.");
+  });
+
+  it("smallCategoryLevel handles binary, multiple, missing, excluded, continuous, and threshold cases", () => {
+    const columns = [
+      { name: "binary", confirmedType: "binary", levels: [{ code: 0, label: "No" }, { code: 1, label: "Yes" }] },
+      { name: "many", confirmedType: "categorical_nominal", levels: [...Array.from({ length: 7 }, (_, i) => ({ code: String(i), label: `L${i}` })), { code: "common", label: "Common" }] },
+      { name: "missing", confirmedType: "categorical_nominal", levels: [{ code: "A", label: "A" }, { code: "B", label: "B" }] },
+      { name: "excluded", confirmedType: "categorical_nominal", exclusionReason: "excluded" },
+      { name: "continuous", confirmedType: "continuous" },
+      { name: "threshold", confirmedType: "categorical_nominal" },
+    ];
+    const rows: unknown[][] = [
+      ...Array(5).fill([0, "0", "A", "A", 1, "A"]),
+      ...Array(5).fill([1, "1", "B", "B", 2, "A"]),
+      ...Array(5).fill([0, "2", "", "A", 3, "B"]),
+      ...Array(5).fill([0, "3", null, "A", 4, "B"]),
+      ...Array(5).fill([0, "4", "", "A", 5, "B"]),
+      ...Array(5).fill([0, "5", "", "A", 6, "B"]),
+      ...Array(5).fill([0, "6", "", "A", 7, "B"]),
+      ...Array(5).fill([0, "common", "", "A", 8, "B"]),
+      ...Array(5).fill([0, "common", "", "A", 9, "B"]),
+      ...Array(1).fill([0, "common", "", "A", 10, "B"]),
+    ];
+    const findings = runChecks("data-review", { schema: { columns } as any, data: { columns: columns.map(({ name }) => ({ name })), rows, meta: dummyMeta } as any });
+    const binary = findings.find((f) => f.checkId === "smallCategoryLevel_binary");
+    expect(binary?.detail).toContain("level 'Yes' has n = 5");
+    const many = findings.find((f) => f.checkId === "smallCategoryLevel_many");
+    expect(many?.detail).toContain("levels 'L0' (n = 5) and 'L1' (n = 5)");
+    expect(many?.detail).toContain("and 2 more");
+    const missingDetail = findings.find((f) => f.checkId === "smallCategoryLevel_missing")?.detail ?? "";
+    expect(missingDetail).toContain("levels 'A' (n = 5) and 'B' (n = 5)");
+    expect(missingDetail).not.toContain("''");
+    expect(findings.some((f) => f.checkId.startsWith("smallCategoryLevel_excluded"))).toBe(false);
+    expect(findings.some((f) => f.checkId.startsWith("smallCategoryLevel_continuous"))).toBe(false);
+    expect(findings.some((f) => f.checkId.startsWith("smallCategoryLevel_threshold"))).toBe(false);
+  });
+
   it("Extensibility: runChecks works on custom check registry entries without changing implementation", () => {
     const customRegistry: CheckDefinition[] = [
       {
@@ -414,6 +462,21 @@ describe("runChecks and CHECK_REGISTRY", () => {
     expect(d43?.affectedRowsSample).toEqual([3]);
     expect(d43?.metadataOnly?.violationCount).toBe(1);
     expect(d43?.metadataOnly?.conceptId).toBe("age");
+  });
+
+  it("D98 includes both display label and raw key in QA findings", () => {
+    const schema = {
+      columns: [{ name: "Cholesterol_TP_T0", displayLabel: "Total cholesterol at admission", inferredType: "continuous", confirmedType: "continuous", cardinalityTier: "ok" }],
+    };
+    const data = {
+      columns: [{ name: "Cholesterol_TP_T0" }],
+      rows: [[null], [200], [null], [220], [null]],
+      meta: dummyMeta,
+    };
+
+    const finding = runChecks("data-review", { schema: schema as any, data: data as any })
+      .find((item) => item.checkId === "highMissingness_Cholesterol_TP_T0");
+    expect(finding?.detail).toContain("Total cholesterol at admission (Cholesterol_TP_T0)");
   });
 
   it("D43 sanityBounds suppresses other population and dispatches pediatric bounds", () => {
@@ -550,5 +613,72 @@ describe("runChecks and CHECK_REGISTRY", () => {
     const findingsBalanced = runChecks("plan", ctxBalanced);
     const imbalanceFindingBalanced = findingsBalanced.find(f => f.checkId === "groupImbalance");
     expect(imbalanceFindingBalanced).toBeUndefined();
+  });
+
+  it("flags only categorical variables whose every level occurs in exactly one group", () => {
+    const schema = {
+      columns: [
+        { name: "group", confirmedType: "binary", displayLabel: "Genotype group" },
+        { name: "detailed", confirmedType: "categorical_nominal", displayLabel: "Genotype (detailed)" },
+        { name: "same_as_group", confirmedType: "binary" },
+        { name: "citrulline", confirmedType: "binary" },
+        { name: "jaundice", confirmedType: "binary" },
+        { name: "age", confirmedType: "continuous" },
+      ],
+    };
+    const data = {
+      columns: schema.columns.map(({ name }) => ({ name })),
+      rows: [
+        ...Array.from({ length: 8 }, () => ["One allele", "Single heterozygous", "One allele", "Positive", "Positive", 10]),
+        ...Array.from({ length: 2 }, () => ["Two alleles", "Homozygous", "Two alleles", "Positive", "Negative", 11]),
+        ...Array.from({ length: 1 }, () => ["One allele", "Single heterozygous", "One allele", "Negative", "Negative", 12]),
+        ...Array.from({ length: 22 }, () => ["Two alleles", "Compound heterozygous", "Two alleles", "Negative", "Negative", 13]),
+        ...Array.from({ length: 12 }, () => ["Two alleles", "Compound heterozygous", "Two alleles", "Negative", "Positive", 14]),
+        ...Array.from({ length: 25 }, () => ["Two alleles", "Compound heterozygous", "Two alleles", "Negative", "Negative", 15]),
+      ],
+      meta: dummyMeta,
+    };
+    const plan = {
+      groupingVariable: "group",
+      includedVariables: ["detailed", "same_as_group", "citrulline", "jaundice", "age"],
+    };
+
+    const findings = runChecks("plan", { schema: schema as any, data: data as any, plan: plan as any });
+    const reencoding = findings.filter((finding) => finding.checkId.startsWith("groupingVariableReencoding_"));
+
+    expect(reencoding).toHaveLength(2);
+    expect(reencoding.map((finding) => finding.variable)).toEqual(["detailed", "same_as_group"]);
+    expect(reencoding.every((finding) => finding.tier === "advisory")).toBe(true);
+    expect(findings.filter((finding) => finding.tier === "blocking")).toHaveLength(0);
+    expect(reencoding[0].detail).toContain('Every level of "Genotype (detailed)" occurs in only one genotype group');
+  });
+
+  it("does not run the re-encoding check without a grouping variable", () => {
+    const findings = runChecks("plan", {
+      schema: { columns: [{ name: "detail", confirmedType: "categorical_nominal" }] } as any,
+      data: { columns: [{ name: "detail" }], rows: [["A"], ["B"]], meta: dummyMeta } as any,
+      plan: { includedVariables: ["detail"] } as any,
+    });
+
+    expect(findings.filter((finding) => finding.checkId.startsWith("groupingVariableReencoding_"))).toEqual([]);
+  });
+
+  it("does not run the re-encoding check before Plan initializes included variables", () => {
+    const findings = runChecks("plan", {
+      schema: {
+        columns: [
+          { name: "group", confirmedType: "binary" },
+          { name: "detail", confirmedType: "binary" },
+        ],
+      } as any,
+      data: {
+        columns: [{ name: "group" }, { name: "detail" }],
+        rows: [["A", "A"], ["B", "B"]],
+        meta: dummyMeta,
+      } as any,
+      plan: { groupingVariable: "group" } as any,
+    });
+
+    expect(findings.filter((finding) => finding.checkId.startsWith("groupingVariableReencoding_"))).toEqual([]);
   });
 });

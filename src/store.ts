@@ -7,9 +7,11 @@ import type { ExplanationDepth } from "./core/education/educationTypes";
 import type { ResearchPopulation, UnitSystem } from "./core/bounds/boundsChecker";
 import { POLISH_REGISTRY } from "./core/qa/polishRegistry";
 import type { PolishFinding } from "./core/qa/polishRegistry";
+import { recodeToMissing } from "./core/qa/missingCodes";
 import { computeModelingFingerprint } from "./core/modeling/types";
+import { MAX_DATA_ROWS, describeRowLimitExceeded } from "./core/performance/largeDatasetGuardrails";
 
-function computeDataFingerprint(data: DataFrame | null): string {
+export function computeDataFingerprint(data: DataFrame | null): string {
   if (!data) return "no-data";
   return JSON.stringify({
     columns: data.columns.map((c) => c.name),
@@ -61,7 +63,7 @@ interface AppState {
   setHeaderRowIndex: (idx: number) => void;
 
   data: DataFrame | null;
-  setData: (data: DataFrame | null) => void;
+  setData: (data: DataFrame | null) => boolean;
 
   schema: Schema | null;
   setSchema: (schema: Schema | null) => void;
@@ -119,6 +121,7 @@ interface AppState {
   ordinalReorderFocusColumn: string | null;
   setOrdinalReorderFocusColumn: (col: string | null) => void;
   applyPolishFinding: (finding: PolishFinding, canonical?: string) => void;
+  applyMissingCodeRecode: (column: string, codes: string[]) => void;
 
   tutorialOpen: boolean;
   setTutorialOpen: (open: boolean) => void;
@@ -149,11 +152,17 @@ export const useStore = create<AppState>((set) => ({
   setHeaderRowIndex: (headerRowIndex) => set({ headerRowIndex }),
 
   data: null,
-  setData: (data) =>
+  setData: (data) => {
+    if (data && data.rows.length > MAX_DATA_ROWS) {
+      set({ data: null, error: describeRowLimitExceeded(data.rows.length) });
+      return false;
+    }
     set((state) => {
       const changed = computeDataFingerprint(state.data) !== computeDataFingerprint(data);
-      return changed ? { data, edaResults: null, modelingSetup: null, modelingResults: null } : { data };
-    }),
+      return changed ? { data, error: null, edaResults: null, modelingSetup: null, modelingResults: null } : { data, error: null };
+    });
+    return true;
+  },
 
   schema: null,
   setSchema: (schema) =>
@@ -365,6 +374,84 @@ export const useStore = create<AppState>((set) => ({
         edaResults: null,
         modelingSetup: null,
         modelingResults: null,
+      };
+    }),
+
+  applyMissingCodeRecode: (column, codes) =>
+    set((state) => {
+      if (!state.data || !state.schema) return {};
+
+      const result = recodeToMissing(state.data, state.schema, column, codes);
+      const timestamp = new Date().toISOString();
+
+      const auditEntry: AuditEntry = {
+        timestamp,
+        action: "missing_code_recoded",
+        details: {
+          column,
+          codes: codes.join(","),
+          count: result.changed,
+        },
+      };
+
+      const checkId = `missing_code_${column}`;
+      const existingIdx = state.dataQualityRecords.findIndex(
+        (r) => r.finding.checkId === checkId,
+      );
+
+      let nextRecords: DataQualityRecord[];
+      if (existingIdx >= 0) {
+        const existing = state.dataQualityRecords[existingIdx];
+        const existingCodes = existing.finding.sampleValues ?? [];
+        const mergedCodes = [...existingCodes];
+        for (const c of codes) {
+          if (!mergedCodes.includes(c)) {
+            mergedCodes.push(c);
+          }
+        }
+        const totalCount = (existing.finding.affectedCount ?? 0) + result.changed;
+        const mergedRecord: DataQualityRecord = {
+          ...existing,
+          timestamp,
+          fixDetails: `Recoded codes: ${mergedCodes.join(", ")}`,
+          finding: {
+            ...existing.finding,
+            affectedCount: totalCount,
+            sampleValues: mergedCodes,
+            detail: `${totalCount} value(s) coded ${mergedCodes.join(", ")} in ${column} were treated as missing.`,
+          },
+        };
+        nextRecords = [...state.dataQualityRecords];
+        nextRecords[existingIdx] = mergedRecord;
+      } else {
+        const record: DataQualityRecord = {
+          finding: {
+            checkId,
+            tier: "advisory",
+            category: "quality",
+            variable: column,
+            title: "Missing-value codes recoded",
+            detail: `${result.changed} value(s) coded ${codes.join(", ")} in ${column} were treated as missing.`,
+            remedy: "",
+            affectedCount: result.changed,
+            sampleValues: codes,
+          },
+          response: "applied",
+          timestamp,
+          fixDetails: `Recoded codes: ${codes.join(", ")}`,
+        };
+        nextRecords = [...state.dataQualityRecords, record];
+      }
+
+      return {
+        data: result.df,
+        schema: result.schema,
+        auditLog: [...state.auditLog, auditEntry],
+        dataQualityRecords: nextRecords,
+        edaResults: null,
+        modelingSetup: null,
+        modelingResults: null,
+        stats: null,
       };
     }),
 

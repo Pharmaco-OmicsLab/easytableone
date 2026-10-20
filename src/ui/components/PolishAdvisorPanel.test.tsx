@@ -62,6 +62,15 @@ describe("PolishAdvisorPanel", () => {
     expect(container.firstChild).toBeNull();
   });
 
+  it("shows the empty state when valid data has no polish suggestions", () => {
+    useStore.setState({
+      data: { ...mockData, columns: [{ originalName: "age", name: "age" }], rows: [[20], [30]] },
+      schema: { columns: [{ name: "age", inferredType: "continuous", confirmedType: "continuous", cardinalityTier: "ok" }] },
+    } as any);
+    render(<PolishAdvisorPanel />);
+    expect(screen.getByText("No suggestions.")).toBeTruthy();
+  });
+
   it("renders findings and groups them by title", () => {
     render(<PolishAdvisorPanel />);
 

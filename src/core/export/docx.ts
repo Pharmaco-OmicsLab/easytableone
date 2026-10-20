@@ -23,6 +23,13 @@ import { buildEducationReportDocxChildren } from "./educationReport";
 import { buildCorrelationSpec, buildMissingnessSpec } from "../eda/edaSpecBuilders";
 import { vegaLiteSpecToPng } from "./vegaRender";
 
+
+
+/**
+ * Builds the user's DOCX export from the already formatted table and optional plot, EDA, modeling, methods, and education data.
+ * The statistical rows are not recomputed here; the document uses the same journal-formatted cells as the preview and other
+ * table exporters. The returned promise resolves to a browser `Blob` suitable for download.
+ */
 export async function exportDocx(
   table: FormattedTable,
   meta: { appVersion: string },

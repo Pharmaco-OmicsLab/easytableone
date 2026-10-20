@@ -375,7 +375,7 @@ describe('PlanStage — Grouping Swap Logic (Step 8c.1)', () => {
     }));
     render(<PlanStage />);
 
-    fireEvent.click(screen.getByLabelText('Custom...'));
+    fireEvent.click(screen.getByLabelText('Custom…'));
     fireEvent.change(screen.getByPlaceholderText('Type one group label per line'), {
       target: { value: 'group2\nunknown-group\ngroup1' },
     });
@@ -384,7 +384,7 @@ describe('PlanStage — Grouping Swap Logic (Step 8c.1)', () => {
     const previewText = preview.textContent ?? '';
     expect(previewText.indexOf('Second group')).toBeLessThan(previewText.indexOf('unknown-group'));
     expect(previewText.indexOf('unknown-group')).toBeLessThan(previewText.indexOf('First group'));
-    expect(preview.textContent).toContain('unknown-group (n=0)');
+    expect(preview.textContent).toContain('unknown-group (n = 0)');
 
     const ackCheckbox = screen.getByLabelText('I acknowledge this group size warning and want to proceed');
     fireEvent.click(ackCheckbox);
@@ -416,7 +416,7 @@ describe('PlanStage — Grouping Swap Logic (Step 8c.1)', () => {
     }));
     render(<PlanStage />);
 
-    expect(screen.getByText(/For binary variables, "Displayed level" chooses which of the two levels/)).toBeTruthy();
+    expect(screen.getByText(/Rows appear in Table 1 in this order/)).toBeTruthy();
     expect(screen.getByText('Displayed level').closest('label')?.getAttribute('title')).toBe(
       'Which level of this binary variable is reported as the summarized row in Table 1.',
     );
@@ -443,7 +443,7 @@ describe('PlanStage — Grouping Swap Logic (Step 8c.1)', () => {
     useStore.setState({ studyDesign: 'randomized_trial' } as any);
     render(<PlanStage />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Report standardised differences only' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Show SMD, hide P-values' }));
     expect(screen.queryByText(/You have declared a randomised design/)).toBeNull();
 
     const ackCheckbox = screen.getByLabelText('I acknowledge this group size warning and want to proceed');
@@ -452,6 +452,7 @@ describe('PlanStage — Grouping Swap Logic (Step 8c.1)', () => {
 
     await waitFor(() => {
       expect(useStore.getState().plan?.studyDesign).toBe('randomized_trial');
+      expect(useStore.getState().plan?.showSMD).toBe(true);
       expect(useStore.getState().plan?.userOverrides?.hidePValueColumn).toBe(true);
     });
   });
@@ -461,9 +462,268 @@ describe('PlanStage — Grouping Swap Logic (Step 8c.1)', () => {
     useStore.setState({ studyDesign: 'randomized_trial' } as any);
     render(<PlanStage />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Keep P values' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Keep P-values' }));
 
     expect(screen.queryByText(/You have declared a randomised design/)).toBeNull();
     expect(useStore.getState().plan?.userOverrides?.hidePValueColumn).toBeUndefined();
+  });
+});
+
+describe('PlanStage — Phase 50 R1: SMD defaults, guidance, rehydration (D101)', () => {
+  it('defaults SMD to unchecked and P-value to checked on fresh store', () => {
+    seedPlanStore();
+    render(<PlanStage />);
+
+    const smdCheckbox = screen.getByLabelText(/Show SMD/) as HTMLInputElement;
+    const pValueCheckbox = screen.getByLabelText(/Show P-value/) as HTMLInputElement;
+    const mtcSelect = screen.getByLabelText('Multiple Testing Correction') as HTMLSelectElement;
+
+    expect(smdCheckbox.checked).toBe(false);
+    expect(pValueCheckbox.checked).toBe(true);
+    expect(mtcSelect.value).toBe('none');
+  });
+
+  it('rehydrates showSMD, showPValue, and multipleTestingCorrection from plan', () => {
+    seedPlanStore();
+    useStore.setState({
+      plan: {
+        rulesetVersion: '1.0',
+        appVersion: '1.0.0',
+        researchPopulation: 'adult',
+        studyDesign: 'unspecified',
+        unitSystem: 'metric',
+        groupingVariable: 'colA',
+        includedVariables: ['colB', 'colC'],
+        variableConfig: {},
+        showSMD: true,
+        showPValue: false,
+        multipleTestingCorrection: 'holm',
+        auditLog: [],
+      } as any,
+    });
+    render(<PlanStage />);
+
+    const smdCheckbox = screen.getByLabelText(/Show SMD/) as HTMLInputElement;
+    const pValueCheckbox = screen.getByLabelText(/Show P-value/) as HTMLInputElement;
+    const mtcSelect = screen.getByLabelText('Multiple Testing Correction') as HTMLSelectElement;
+
+    expect(smdCheckbox.checked).toBe(true);
+    expect(pValueCheckbox.checked).toBe(false);
+    expect(mtcSelect.value).toBe('holm');
+  });
+
+  it('runs with SMD unchecked and submits showSMD: false', async () => {
+    seedPlanStore();
+    render(<PlanStage />);
+
+    const smdCheckbox = screen.getByLabelText(/Show SMD/) as HTMLInputElement;
+    expect(smdCheckbox.checked).toBe(false);
+
+    const ackCheckbox = screen.getByLabelText('I acknowledge this group size warning and want to proceed');
+    fireEvent.click(ackCheckbox);
+    fireEvent.click(screen.getByRole('button', { name: 'Run Statistics' }));
+
+    await waitFor(() => {
+      expect(useStore.getState().plan?.showSMD).toBe(false);
+      expect(useStore.getState().plan?.showPValue).toBe(true);
+    });
+  });
+
+  it('renders details summary text and does not render retired CONSORT-aligned copy', () => {
+    seedPlanStore();
+    render(<PlanStage />);
+
+    expect(screen.getByText('When should I show SMD?')).toBeTruthy();
+    expect(screen.queryByText(new RegExp(['CONSORT', 'aligned emphasis'].join('-')))).toBeNull();
+  });
+
+  it('renders observational nudge only when studyDesign is observational and SMD is off', () => {
+    seedPlanStore();
+    useStore.setState({ studyDesign: 'observational' } as any);
+    render(<PlanStage />);
+
+    expect(
+      screen.getByText(
+        'Comparing treatment or exposure groups in an observational study? SMD is the standard way to show group balance — see “When should I show SMD?”.',
+      ),
+    ).toBeTruthy();
+
+    // Check SMD -> nudge disappears
+    const smdCheckbox = screen.getByLabelText(/Show SMD/);
+    fireEvent.click(smdCheckbox);
+    expect(
+      screen.queryByText(
+        'Comparing treatment or exposure groups in an observational study? SMD is the standard way to show group balance — see “When should I show SMD?”.',
+      ),
+    ).toBeNull();
+  });
+
+  it('does not render observational nudge for other study designs', () => {
+    for (const design of ['unspecified', 'randomized_trial', 'other'] as const) {
+      seedPlanStore();
+      useStore.setState({ studyDesign: design } as any);
+      const { unmount } = render(<PlanStage />);
+      expect(
+        screen.queryByText(
+          'Comparing treatment or exposure groups in an observational study? SMD is the standard way to show group balance — see “When should I show SMD?”.',
+        ),
+      ).toBeNull();
+      unmount();
+    }
+  });
+
+  it('shows stale stats banner when stats exist without SMD but showSMD is enabled', () => {
+    seedPlanStore();
+    useStore.setState({
+      stats: {
+        perVariable: [
+          { variable: 'colB', smd: null },
+        ],
+      } as any,
+      plan: {
+        showSMD: true,
+      } as any,
+    });
+    render(<PlanStage />);
+
+    expect(screen.getByText('Display settings changed — re-run the analysis to update the table.')).toBeTruthy();
+  });
+
+  it('Phase 50 R5: advisory click, then uncheck SMD -> submitted plan has no hidePValueColumn and notice is shown', async () => {
+    seedPlanStore();
+    useStore.setState({ studyDesign: 'randomized_trial' } as any);
+    render(<PlanStage />);
+
+    // Click RCT advisory button
+    const advisoryBtn = screen.getByRole('button', { name: 'Show SMD, hide P-values' });
+    fireEvent.click(advisoryBtn);
+
+    // Uncheck Show SMD
+    const smdCheckbox = screen.getByLabelText(/Show SMD/) as HTMLInputElement;
+    expect(smdCheckbox.checked).toBe(true);
+    fireEvent.click(smdCheckbox);
+    expect(smdCheckbox.checked).toBe(false);
+
+    // Notice should be rendered
+    expect(
+      screen.getByText('P values will be shown, because standardised differences are switched off.'),
+    ).toBeTruthy();
+
+    // Run statistics
+    const ackCheckbox = screen.getByLabelText('I acknowledge this group size warning and want to proceed');
+    fireEvent.click(ackCheckbox);
+    fireEvent.click(screen.getByRole('button', { name: 'Run Statistics' }));
+
+    await waitFor(() => {
+      const plan = useStore.getState().plan;
+      expect(plan?.userOverrides?.hidePValueColumn).toBeUndefined();
+    });
+  });
+
+  it('Phase 50 R5: re-running from PlanStage preserves userOverrides and testOverrides for included variables (D107(d))', async () => {
+    seedPlanStore();
+    useStore.setState({
+      plan: {
+        rulesetVersion: '1.0',
+        appVersion: '1.0',
+        researchPopulation: 'adult',
+        studyDesign: 'unspecified',
+        unitSystem: 'metric',
+        groupingVariable: 'colA',
+        includedVariables: ['colB', 'colC'],
+        variableConfig: {},
+        showSMD: false,
+        showPValue: true,
+        multipleTestingCorrection: 'none',
+        auditLog: [],
+        userOverrides: {
+          numberFormat: { style: 'nejm', decimalPlaces: 2 },
+        },
+        testOverrides: [
+          { variable: 'colB', method: 'fisher', timestamp: '2026-09-28T00:00:00Z' },
+          { variable: 'colExcluded', method: 'ordinal_rank', timestamp: '2026-09-28T00:00:00Z' },
+        ],
+      } as any,
+    });
+
+    render(<PlanStage />);
+
+    const ackCheckbox = screen.getByLabelText('I acknowledge this group size warning and want to proceed');
+    fireEvent.click(ackCheckbox);
+    fireEvent.click(screen.getByRole('button', { name: 'Run Statistics' }));
+
+    await waitFor(() => {
+      const submittedPlan = useStore.getState().plan;
+      // userOverrides preserved
+      expect(submittedPlan?.userOverrides?.numberFormat).toEqual({ style: 'nejm', decimalPlaces: 2 });
+      // testOverrides for included variable preserved
+      expect(submittedPlan?.testOverrides?.some((o) => o.variable === 'colB')).toBe(true);
+      // testOverrides for excluded variable dropped
+      expect(submittedPlan?.testOverrides?.some((o) => o.variable === 'colExcluded')).toBe(false);
+    });
+  });
+});
+
+describe('PlanStage — Phase 52 R5 analysis-plan controls', () => {
+  it('uses the same row reorder for arrow buttons and dragging', () => {
+    seedPlanStore();
+    render(<PlanStage />);
+    const rowOrder = screen.getByText('Table Rows Order (Drag to Reorder)').parentElement;
+    const rows = () => Array.from(rowOrder!.querySelectorAll<HTMLElement>('[draggable="true"]')).map((row) => row.textContent?.match(/col[A-Z]/)?.[0]);
+    expect(rows()).toEqual(['colB', 'colC']);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Move colC up' }));
+    expect(rows()).toEqual(['colC', 'colB']);
+
+    const firstRow = rowOrder!.querySelector<HTMLElement>('[draggable="true"]')!;
+    const secondRow = rowOrder!.querySelectorAll<HTMLElement>('[draggable="true"]')[1];
+    const dataTransfer = { effectAllowed: 'move' };
+    fireEvent.dragStart(firstRow, { dataTransfer });
+    fireEvent.drop(secondRow, { dataTransfer });
+    expect(rows()).toEqual(['colB', 'colC']);
+  });
+
+  it('keeps the first applicable blocker visible ahead of engine readiness', () => {
+    seedPlanStore();
+    render(<PlanStage engineReady={false} />);
+    fireEvent.change(screen.getByLabelText('Grouping Variable'), { target: { value: '' } });
+    const run = screen.getByTestId('plan-run-statistics');
+    expect(run.getAttribute('aria-disabled')).toBe('true');
+    expect(run.getAttribute('title')).toBe('Choose a grouping variable');
+    expect(screen.getByText('Choose a grouping variable')).toBeTruthy();
+    fireEvent.click(run);
+    expect(runTable1).not.toHaveBeenCalled();
+  });
+
+  it('uses the engine reason once the plan has no earlier blocker', () => {
+    seedPlanStore();
+    render(<PlanStage engineReady={false} />);
+    const groupWarning = screen.queryByLabelText('I acknowledge this group size warning and want to proceed');
+    if (groupWarning) fireEvent.click(groupWarning);
+    const run = screen.getByTestId('plan-run-statistics');
+    expect(run.getAttribute('aria-disabled')).toBe('true');
+    expect(run.getAttribute('title')).toBe('Waiting for the analysis engine to finish starting…');
+  });
+
+  it.each(['none', 'bonferroni', 'holm', 'bh'] as const)('round-trips the %s multiple-testing choice', async (correction) => {
+    seedPlanStore();
+    render(<PlanStage />);
+    fireEvent.change(screen.getByLabelText('Multiple Testing Correction'), { target: { value: correction } });
+    const groupWarning = screen.queryByLabelText('I acknowledge this group size warning and want to proceed');
+    if (groupWarning) fireEvent.click(groupWarning);
+    fireEvent.click(screen.getByRole('button', { name: 'Run Statistics' }));
+    await waitFor(() => expect(useStore.getState().plan?.multipleTestingCorrection).toBe(correction));
+  });
+
+  it('cancels an in-flight analysis when Back is clicked', async () => {
+    seedPlanStore();
+    vi.mocked(runTable1).mockReturnValueOnce(new Promise(() => {}));
+    render(<PlanStage />);
+    const groupWarning = screen.queryByLabelText('I acknowledge this group size warning and want to proceed');
+    if (groupWarning) fireEvent.click(groupWarning);
+    fireEvent.click(screen.getByRole('button', { name: 'Run Statistics' }));
+    await screen.findByText('Computing Table 1 in your browser…');
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+    expect(useStore.getState().stage).toBe(5);
   });
 });

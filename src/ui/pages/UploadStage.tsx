@@ -12,6 +12,12 @@ interface UploadStageProps {
   embedded?: boolean;
 }
 
+function formatBytes(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 export default function UploadStage({ embedded = false }: UploadStageProps) {
   const {
     file,
@@ -31,15 +37,18 @@ export default function UploadStage({ embedded = false }: UploadStageProps) {
     setUnitSystem,
   } = useStore();
   const [processingMessage, setProcessingMessage] = useState<string | null>(null);
+  const [dragging, setDragging] = useState(false);
 
   const handleFile = async (nextFile: File) => {
     try {
       setError(null);
-      setProcessingMessage(`Reading ${nextFile.name} in your browser...`);
+      setData(null);
+      setSheets([]);
+      setProcessingMessage(`Reading ${nextFile.name} · ${formatBytes(nextFile.size)}`);
       setFile(nextFile);
       if (nextFile.name.endsWith(".csv")) {
         const parsedData = await parseCSV(nextFile);
-        setData(parsedData);
+        if (!setData(parsedData)) return;
       } else if (nextFile.name.endsWith(".xlsx")) {
         const { sheets: parsedSheets } = await enumerateSheets(nextFile);
         setSheets(parsedSheets);
@@ -73,6 +82,7 @@ export default function UploadStage({ embedded = false }: UploadStageProps) {
   const onDrop = useCallback(
     (e: React.DragEvent<HTMLDivElement>) => {
       e.preventDefault();
+      setDragging(false);
       const droppedFile = e.dataTransfer.files[0];
       if (droppedFile) handleFile(droppedFile);
     },
@@ -130,39 +140,18 @@ export default function UploadStage({ embedded = false }: UploadStageProps) {
       {!embedded && <AboutThisStep stage="upload" />}
       {!embedded && <h2 className="text-2xl font-bold mb-6">Upload Dataset</h2>}
 
-      <div id="upload-tutorial-card" className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-5">
-        <p className="text-sm font-medium text-blue-800 mb-3">New here? See the expected input format.</p>
-        <div className="flex flex-wrap gap-3">
-          <button
-            id="upload-view-guide-button"
-            type="button"
-            onClick={() => setTutorialOpen(true)}
-            className="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            View input format guide
-          </button>
-          <button
-            id="upload-try-sample"
-            type="button"
-            onClick={handleTrySample}
-            className="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            Try with sample data
-          </button>
-          <a
-            id="upload-download-sample"
-            href={`${import.meta.env.BASE_URL}samples/easytableone_sample.xlsx`}
-            download
-            className="inline-flex items-center px-4 py-2 border border-blue-300 text-blue-700 bg-white text-sm font-medium rounded-lg hover:bg-blue-50 transition-colors"
-          >
-            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-            </svg>
-            Download sample workbook
-          </a>
+      {!canProceed && (embedded ? <div id="upload-tutorial-card" className="mb-5 rounded-xl border border-blue-200 bg-blue-50 p-4">
+        <p className="text-sm font-semibold text-blue-950">Sample workbook — 25 participants · 8 variables · includes a dictionary sheet</p>
+        <div className="mt-3 flex flex-wrap gap-2"><a id="upload-download-sample" href={`${import.meta.env.BASE_URL}samples/easytableone_sample.xlsx`} download className="inline-flex min-h-10 items-center rounded-lg border border-blue-300 bg-white px-4 text-sm font-semibold text-blue-800 hover:bg-blue-50">Download</a>
+          <button id="upload-try-sample" type="button" onClick={handleTrySample} className="min-h-10 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700">{embedded ? "Try sample" : "Try with sample data"}</button>
+          <button id="upload-view-guide-button" type="button" onClick={() => setTutorialOpen(true)} className="min-h-10 rounded-lg px-3 text-sm font-medium text-blue-800 underline">Input format guide</button>
         </div>
-      </div>
-
+      </div> : <div id="upload-tutorial-card" className="mb-6 rounded-lg border border-blue-200 bg-blue-50 p-5">
+        <p className="mb-3 text-sm font-medium text-blue-800">New here? See the expected input format.</p><div className="flex flex-wrap gap-3">
+          <button id="upload-view-guide-button" type="button" onClick={() => setTutorialOpen(true)} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white">View input format guide</button>
+          <button id="upload-try-sample" type="button" onClick={handleTrySample} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white">Try with sample data</button>
+          <a id="upload-download-sample" href={`${import.meta.env.BASE_URL}samples/easytableone_sample.xlsx`} download className="rounded-lg border border-blue-300 bg-white px-4 py-2 text-sm font-medium text-blue-700">Download sample workbook</a>
+        </div></div>)}
       {canProceed && file ? (
         <div
           onDrop={onDrop}
@@ -192,8 +181,9 @@ export default function UploadStage({ embedded = false }: UploadStageProps) {
       ) : (
         <div
           onDrop={onDrop}
-          onDragOver={(e) => e.preventDefault()}
-          className="relative border-2 border-dashed border-gray-300 rounded-lg p-12 text-center bg-white hover:bg-gray-50 transition-colors cursor-pointer mb-6"
+          onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+          onDragLeave={() => setDragging(false)}
+          className={`relative mb-5 cursor-pointer rounded-xl border-2 border-dashed p-10 text-center transition-colors ${dragging ? "border-blue-600 bg-blue-50" : "border-gray-300 bg-white hover:bg-gray-50"}`}
         >
           <div className="mb-4 text-gray-400">
             <svg className="mx-auto h-12 w-12" stroke="currentColor" fill="none" viewBox="0 0 48 48">
@@ -205,14 +195,10 @@ export default function UploadStage({ embedded = false }: UploadStageProps) {
               />
             </svg>
           </div>
-          <p className="text-lg text-gray-600 mb-1">Drag and drop a CSV or XLSX file here</p>
-          <p className="text-sm text-gray-500">Or click to select a file</p>
-          <p className="mt-3 text-xs font-bold text-gray-950">
-            Privacy note: {PRIVACY_BLURB_SHORT}{" "}
-            <button type="button" onClick={() => setAboutOpen(true)} className="font-normal underline">
-              Learn more
-            </button>
-          </p>
+          <p className={embedded ? "text-lg font-semibold text-gray-900" : "mb-1 text-lg text-gray-600"}>{embedded ? "Drop your spreadsheet here" : "Drag and drop a CSV or XLSX file here"}</p>
+          <p className="mt-1 text-sm text-gray-600">{embedded ? "or browse files on this device" : "Or click to select a file"}</p>
+          <div className="mt-4 flex flex-wrap justify-center gap-2 text-xs"><span className="rounded-full bg-gray-100 px-3 py-1">.xlsx</span><span className="rounded-full bg-gray-100 px-3 py-1">.csv</span><span className="rounded-full bg-gray-100 px-3 py-1">Up to 100,000 rows</span></div>
+          <p className="mt-3 text-xs text-gray-500">{!embedded && "Privacy note: "}{PRIVACY_BLURB_SHORT} <button type="button" onClick={() => setAboutOpen(true)} className="underline">Learn more</button></p>
           <input
             type="file"
             className="hidden"
@@ -221,14 +207,14 @@ export default function UploadStage({ embedded = false }: UploadStageProps) {
             id="fileInput"
             data-testid="upload-file-input"
           />
-          <label htmlFor="fileInput" className="absolute inset-0 cursor-pointer" />
+          <label htmlFor="fileInput" className="absolute inset-0 cursor-pointer" aria-label="Browse files on this device" />
         </div>
       )}
 
       {processingMessage && (
         <div className="mb-6 rounded-md border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800" role="status" aria-live="polite">
           <div className="font-semibold">{processingMessage}</div>
-          <div className="mt-1 text-xs">Large files may take a little longer because all parsing happens locally on this device.</div>
+          <div className="mt-1 text-xs">Parsing locally on this device — nothing leaves your browser.</div>
         </div>
       )}
 

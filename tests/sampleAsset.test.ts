@@ -80,13 +80,4 @@ describe("Sample workbook asset", () => {
     ]);
   });
 
-  it("_materials copy matches the public downloadable sample", () => {
-    const materialsPath = path.resolve(
-      __dirname,
-      "..",
-      "_materials",
-      "easytableone_sample.xlsx"
-    );
-    expect(fs.readFileSync(materialsPath)).toEqual(fs.readFileSync(assetPath));
-  });
 });

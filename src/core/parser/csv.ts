@@ -1,6 +1,8 @@
 import Papa from "papaparse";
 import type { Cell, DataFrame, ParseWarning } from "../types";
 
+
+/** Exact case-sensitive text tokens normalized to missing values during CSV/XLSX parsing. */
 export const DEFAULT_MISSING_SENTINELS = [
   "",
   "NA",
@@ -13,6 +15,8 @@ export const DEFAULT_MISSING_SENTINELS = [
   "#N/A",
 ];
 
+
+/** Canonical spreadsheet error tokens recognized by the importers after trimming and case normalization. */
 export const EXCEL_ERROR_TOKENS = [
   "#REF!",
   "#VALUE!",
@@ -25,12 +29,20 @@ export const EXCEL_ERROR_TOKENS = [
   "#GETTING_DATA",
 ];
 
+
+/** Combined missing-value tokens shared by CSV and XLSX parsing metadata. */
 export const ALL_MISSING_SENTINELS = [...DEFAULT_MISSING_SENTINELS, ...EXCEL_ERROR_TOKENS];
 
+
+
+/** Returns whether a trimmed cell value is a recognized Excel error token, case-insensitively. */
 export function isExcelErrorToken(value: string): boolean {
   return EXCEL_ERROR_TOKENS.includes(value.trim().toUpperCase());
 }
 
+
+
+/** Adds one normalized spreadsheet error token to the per-column error accumulator. */
 export function recordExcelError(
   counts: Record<string, { count: number; tokens: Set<string> }>,
   column: string,
@@ -42,6 +54,9 @@ export function recordExcelError(
   counts[column] = entry;
 }
 
+
+
+/** Appends one parse warning per affected column and returns its error-cell counts, or `undefined` when none were found. */
 export function appendExcelErrorWarnings(
   warnings: ParseWarning[],
   counts: Record<string, { count: number; tokens: Set<string> }>,
@@ -65,6 +80,13 @@ function isEuropeanDecimalPattern(value: string): boolean {
   return false;
 }
 
+
+
+/**
+ * Parses a local CSV into the normalized `DataFrame` contract. Empty and recognized Excel-error cells become
+ * `null`; unsupported European decimal patterns remain text and are reported in `meta.parseWarnings`.
+ * The optional callback is reserved for parse progress; the current Papa Parse step API does not expose byte progress.
+ */
 export function parseCSV(file: File, onProgress?: (pct: number) => void): Promise<DataFrame> {
   return new Promise((resolve, reject) => {
 
@@ -76,7 +98,10 @@ export function parseCSV(file: File, onProgress?: (pct: number) => void): Promis
 
 
     Papa.parse(file, {
-      worker: typeof window !== "undefined" && typeof Worker !== "undefined",
+      // Papa Parse may need to fetch its worker script on first use. If the app is already
+      // offline, parse on the main thread so importing a local file does not depend on that fetch.
+      worker: typeof window !== "undefined" && typeof Worker !== "undefined" &&
+        window.navigator.onLine && file.size > 256 * 1024,
       skipEmptyLines: true,
       step: (results, _parser) => {
         const rawRow = results.data as string[];

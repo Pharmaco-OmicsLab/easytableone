@@ -9,6 +9,7 @@ const round9DecisionIds = [
   "schema.ordinal-order",
   "schema.exclusions",
   "qa.gates",
+  "qa.small-category",
   "qa.sanity-bounds",
   "qa.eda-correlation",
   "qa.eda-vif",
@@ -68,6 +69,13 @@ describe("education content registry", () => {
     const decision = getDecision("stats.test-selection.Age", "concise", { stats: mockStats, schema: dummySchema, plan: dummyPlan });
     expect(decision.label).toContain("Age");
     expect(decision.concise.what).toContain("Welch");
+  });
+
+  it("explains the small-category threshold and advisory behavior", () => {
+    const decision = getDecision("qa.small-category", "deep", round9Context).concise;
+    expect(decision.what).toContain("n < 10");
+    expect(decision.why).toContain("needs no acknowledgement");
+    expect(decision.why).toContain("leaves the analysis unchanged");
   });
 
   it("replaces all Round 9 placeholders with concise and deep explanations", () => {

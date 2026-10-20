@@ -3,6 +3,7 @@ import { useStore } from "./store";
 import type { DataFrame, Schema } from "./core/types";
 import type { EDAResults } from "./core/eda/types";
 import type { ModelingResults, ModelingSetup } from "./core/modeling/types";
+import { MAX_DATA_ROWS, describeRowLimitExceeded } from "./core/performance/largeDatasetGuardrails";
 
 const schema: Schema = {
   columns: [{ name: "a", inferredType: "continuous", confirmedType: "continuous", cardinalityTier: "ok" }],
@@ -77,6 +78,18 @@ beforeEach(() => {
 });
 
 describe("store EDA cache invalidation", () => {
+  it("rejects over-limit frames before storing them and accepts the exact limit", () => {
+    const tooLarge = { ...data, rows: Array.from({ length: MAX_DATA_ROWS + 1 }, () => [1]) };
+    expect(useStore.getState().setData(tooLarge)).toBe(false);
+    expect(useStore.getState().data).toBeNull();
+    expect(useStore.getState().error).toBe(describeRowLimitExceeded(MAX_DATA_ROWS + 1));
+
+    const atLimit = { ...data, rows: Array.from({ length: MAX_DATA_ROWS }, () => [1]) };
+    expect(useStore.getState().setData(atLimit)).toBe(true);
+    expect(useStore.getState().data?.rows).toHaveLength(MAX_DATA_ROWS);
+    expect(useStore.getState().error).toBeNull();
+  });
+
   it("clears EDA results when schema changes", () => {
     useStore.setState({ edaResults });
     useStore.getState().setSchema(schema);

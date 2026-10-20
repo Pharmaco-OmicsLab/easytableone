@@ -1,6 +1,8 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
 import { TEAM } from "../../core/about/aboutContent";
+import { APP_VERSION } from "../../core/appVersion";
+import { journalRulesets } from "../../core/format/formatTable";
 import { useStore } from "../../store";
 import AboutModal from "./AboutModal";
 
@@ -24,6 +26,15 @@ describe("AboutModal", () => {
     expect(screen.getByText("Privacy Policy")).toBeDefined();
     expect(screen.getByText("Terms of Service")).toBeDefined();
     expect(document.body.textContent).not.toContain("EasyFigAssembler");
+  });
+
+  it("shows the application and journal ruleset versions from their sources", () => {
+    useStore.setState({ aboutOpen: true } as any);
+    render(<AboutModal />);
+
+    const version = screen.getByTestId("about-version");
+    expect(version.textContent).toContain(`Version ${APP_VERSION}`);
+    expect(version.textContent).toContain(`journal rulesets v${journalRulesets.EasyTableOne_Ruleset.version}`);
   });
 
   it("closes on Escape", () => {

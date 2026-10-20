@@ -18,10 +18,19 @@ interface TocNode {
   children: TocNode[];
 }
 
+
+
+/** Renders Markdown to HTML with raw HTML disabled and dangerous attribute text neutralized. */
 export function renderMarkdown(md: string): string {
   return neutralizeDangerousAttributeText(markdown.render(md));
 }
 
+
+
+/**
+ * Embeds the unified report's Markdown and local assets into a self-contained HTML document.
+ * Asset links are resolved from the report's asset collection; remote scripts, styles, and assets are not added.
+ */
 export function renderUnifiedReportHtml(
   art: UnifiedReportArtifacts,
   opts: ReportHtmlOptions,
@@ -29,6 +38,7 @@ export function renderUnifiedReportHtml(
   const assetMap = new Map(art.assets.map((asset) => [asset.id, asset]));
   let body = renderMarkdown(art.md);
   body = inlineAssets(body, assetMap);
+  body = stripNonEmbeddedImages(body);
   body = addHeadingIds(body, art.headings);
   body = body.replace("<h1>", "<h1 class=\"title\">");
   body = wrapTopLevelSections(body);
@@ -166,6 +176,17 @@ function unescapeHtml(value: string): string {
     .replace(/&amp;/g, "&")
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">");
+}
+
+// Data locality (D105): a Markdown image such as ![x](https://host/p.png) coming from
+// user-supplied text (labels, dictionary notes) would make the saved report request a
+// remote file when opened. Only data: images are allowed; anything else becomes its alt text.
+function stripNonEmbeddedImages(html: string): string {
+  return html.replace(/<img\b[^>]*>/gi, (tag) => {
+    if (/\bsrc="data:image\//i.test(tag)) return tag;
+    const alt = tag.match(/\balt="([^"]*)"/i)?.[1] ?? "";
+    return alt ? `<span class="removed-image">${alt}</span>` : "";
+  });
 }
 
 function neutralizeDangerousAttributeText(value: string): string {

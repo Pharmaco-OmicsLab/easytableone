@@ -1,13 +1,16 @@
-import { useRef, useState, useEffect } from "react";
+import { useRef, useState, useEffect, useMemo } from "react";
 import type React from "react";
 import { runQA } from "../../core/qa";
 import type { ColumnType, Schema, SchemaColumn } from "../../core/types";
 import { useStore } from "../../store";
 import { stripBracketCodes } from "../../core/format/tableTitle";
 import { deriveSchemaReviewSignal, type SchemaReviewSignal } from "../../core/schema/reviewSignal";
-import AboutThisStep from "../components/AboutThisStep";
 import DecisionExplainer from "../components/DecisionExplainer";
 import EmptyState from "../components/EmptyState";
+import { formatStatisticalNumber } from "../../core/format/numberFormat";
+import { MissingCodesPanel } from "../components/MissingCodesPanel";
+import StepHeader from "../layout/StepHeader";
+import StepActionBar from "../layout/StepActionBar";
 
 const TYPE_OPTIONS: ColumnType[] = [
   "continuous",
@@ -61,7 +64,7 @@ const TYPE_META: Record<ColumnType, { label: string; example: string; consequenc
   },
 };
 
-function typeExampleForColumn(col: SchemaColumn): string {
+function typeExampleForColumn(col: SchemaColumn, exampleValues: string[]): string {
   if (
     (col.confirmedType === "binary" ||
       col.confirmedType === "categorical_nominal" ||
@@ -73,13 +76,31 @@ function typeExampleForColumn(col: SchemaColumn): string {
     return `${stripBracketCodes(col.displayLabel || col.name)}: ${labels}${suffix}`;
   }
 
+  if (
+    (col.confirmedType === "continuous" || col.confirmedType === "id_like" || col.confirmedType === "unsupported") &&
+    exampleValues.length > 0
+  ) {
+    const values = exampleValues.map((value) => {
+      const numericValue = Number(value);
+      return Number.isFinite(numericValue)
+        ? formatStatisticalNumber(numericValue, {
+            thousandSeparator: false,
+            suppressTrailingZero: true,
+            decimalPrecision: 1,
+          })
+        : value;
+    });
+    const unit = col.units ? ` ${col.units}` : "";
+    return `${stripBracketCodes(col.displayLabel || col.name)}: e.g. ${values.join(", ")}${unit}`;
+  }
+
   return TYPE_META[col.confirmedType].example;
 }
 
 const STATUS_META = {
   ok: { label: "OK", icon: "✓", className: "bg-green-100 text-green-800" },
   warn: { label: "Check", icon: "!", className: "bg-yellow-100 text-yellow-800" },
-  flag: { label: "High", icon: "!", className: "bg-red-100 text-red-800" },
+  flag: { label: "Needs review", icon: "!", className: "bg-red-100 text-red-800" },
 };
 
 export default function SchemaStage() {
@@ -98,6 +119,9 @@ export default function SchemaStage() {
   const [initialSchema, setInitialSchema] = useState<Schema | null>(null);
   const [lastSchemaBeforeBulk, setLastSchemaBeforeBulk] = useState<Schema | null>(null);
   const [pendingBulkType, setPendingBulkType] = useState<ColumnType | null>(null);
+  const [rowFilter, setRowFilter] = useState<"all" | "review" | "excluded">("all");
+  const [search, setSearch] = useState("");
+  const [activeExplainer, setActiveExplainer] = useState<string | null>(null);
   const [columnWidths, setColumnWidths] = useState([180, 190, 130, 240, 220, 180]);
 
   // Capture the initial schema when this stage loads, to allow "Reset to Default"
@@ -108,6 +132,34 @@ export default function SchemaStage() {
   }, [schema, initialSchema]);
 
   const ambiguousColumns = schema?.columns.filter((col) => col.confirmedType === "numeric_encoded_categorical_ambiguous") ?? [];
+  const counts = useMemo(() => {
+    const columns = schema?.columns ?? [];
+    return { numeric: columns.filter((c) => c.confirmedType === "continuous").length, categorical: columns.filter((c) => ["binary", "categorical_nominal", "categorical_ordinal"].includes(c.confirmedType)).length, excluded: columns.filter((c) => Boolean(c.exclusionReason)).length, review: columns.filter((c) => c.confirmedType === "numeric_encoded_categorical_ambiguous" || (c.confirmedType === "unsupported" && !c.exclusionReason)).length };
+  }, [schema?.columns]);
+  const visibleColumns = useMemo(() => (schema?.columns ?? []).filter((col) => {
+    const review = col.confirmedType === "numeric_encoded_categorical_ambiguous" || (col.confirmedType === "unsupported" && !col.exclusionReason);
+    const matches = rowFilter === "all" || (rowFilter === "review" && review) || (rowFilter === "excluded" && Boolean(col.exclusionReason));
+    const term = search.trim().toLocaleLowerCase();
+    return matches && (!term || col.name.toLocaleLowerCase().includes(term) || (col.displayLabel ?? "").toLocaleLowerCase().includes(term));
+  }), [schema?.columns, rowFilter, search]);
+  const exampleValuesByColumn = useMemo(() => {
+    const values = (schema?.columns ?? []).map(() => [] as string[]);
+    if (!data || values.length === 0) return values;
+
+    for (const row of data.rows) {
+      let complete = true;
+      for (let columnIndex = 0; columnIndex < values.length; columnIndex++) {
+        const examples = values[columnIndex];
+        if (examples.length >= 3) continue;
+        complete = false;
+        const value = row[columnIndex];
+        if (value !== null && value !== "") examples.push(String(value));
+      }
+      if (complete || values.every((examples) => examples.length >= 3)) break;
+    }
+
+    return values;
+  }, [data, schema?.columns]);
 
   const applyBulkTypeChange = (targetType: ColumnType) => {
     if (!schema) return;
@@ -190,8 +242,8 @@ export default function SchemaStage() {
 
   return (
     <div className="max-w-6xl mx-auto">
-      <AboutThisStep stage="schema" />
-      <h2 className="text-2xl font-bold mb-6">Review & adjust variable types</h2>
+      <StepHeader n={2} eyebrow="VARIABLE TYPES" title="Review & adjust variable types" lede="The app inferred a type for every column. Check the ones that look wrong; the type decides how each variable is summarized in Table 1." next="Data checks" />
+      <MissingCodesPanel />
 
       <p className="mb-4 text-sm text-gray-600">
         The <strong>Display label</strong> is what appears in the published table (e.g.
@@ -202,6 +254,21 @@ export default function SchemaStage() {
       <p className="mb-4 text-sm text-gray-600">
         For categorical variables, imported dictionary levels are used as labels. Mark a variable as ordered only when the category order matters clinically; ordered levels can then be moved up or down in the Levels / Ordinality column.
       </p>
+
+      <section className="mb-4 rounded-xl border border-gray-200 bg-white p-4 shadow-sm" aria-label="Variable summary and filters">
+        <div className="mb-3 flex flex-wrap gap-2" aria-label="Variable counts">
+          <span className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">{counts.numeric} numeric</span>
+          <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800">{counts.categorical} categorical</span>
+          <span className="rounded-full border border-gray-200 bg-gray-100 px-2.5 py-1 text-xs font-semibold text-gray-700">{counts.excluded} excluded</span>
+          <span className="rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-700">{counts.review} need review</span>
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div role="group" aria-label="Filter variables" className="inline-flex rounded-full border border-gray-200 bg-gray-100 p-1">
+            {([['all', `All ${schema.columns.length}`], ['review', `Needs review ${counts.review}`], ['excluded', `Excluded ${counts.excluded}`]] as const).map(([key, label]) => <button key={key} type="button" data-testid={key === "all" ? "schema-filter" : undefined} aria-pressed={rowFilter === key} onClick={() => setRowFilter(key)} className={`rounded-full px-3 py-1 text-xs ${rowFilter === key ? "bg-white font-semibold shadow-sm" : "text-gray-600"}`}>{label}</button>)}
+          </div>
+          <label className="min-w-[200px] flex-1 sm:max-w-xs"><span className="sr-only">Search variables</span><input data-testid="schema-search" type="search" placeholder="Search variables" value={search} onChange={(event) => setSearch(event.target.value)} className="h-9 w-full rounded-lg border border-gray-300 px-3 text-sm" /></label>
+        </div>
+      </section>
 
       <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200 flex flex-wrap gap-4 items-center justify-between">
         <div className="flex flex-wrap gap-4 items-center">
@@ -246,7 +313,7 @@ export default function SchemaStage() {
         </button>
       </div>
       {pendingBulkType && (
-        <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+        <div role="alertdialog" aria-label="Confirm bulk type change" className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
           <div className="font-semibold">
             Apply {TYPE_META[pendingBulkType].label} to {ambiguousColumns.length} unresolved column{ambiguousColumns.length === 1 ? "" : "s"}?
           </div>
@@ -274,23 +341,18 @@ export default function SchemaStage() {
       )}
 
       <div className="mb-6 grid items-start gap-3 md:grid-cols-2">
-        <DecisionExplainer decisionId="schema.type-inference" label="Why these inferred variable types?" context={educationContext} />
-        <DecisionExplainer decisionId="schema.reference-level" label="Why these reference levels?" context={educationContext} />
-        <DecisionExplainer decisionId="schema.ordinal-order" label="Why confirm ordinal order?" context={educationContext} />
-        <DecisionExplainer decisionId="schema.exclusions" label="Why exclude these variables?" context={educationContext} />
+        {(["schema.type-inference", "schema.reference-level", "schema.ordinal-order", "schema.exclusions"] as const).map((decisionId, index) => {
+          const labels = ["Why these inferred variable types?", "Why these reference levels?", "Why confirm ordinal order?", "Why exclude these variables?"];
+          return <DecisionExplainer key={decisionId} decisionId={decisionId} label={labels[index]} context={educationContext} open={activeExplainer === decisionId} onToggle={() => setActiveExplainer((current) => current === decisionId ? null : decisionId)} />;
+        })}
       </div>
 
       <div className="overflow-x-auto overflow-y-visible rounded-lg bg-white shadow">
         <table
-          className="table-fixed border-collapse divide-y divide-gray-200"
-          style={{ width: columnWidths.reduce((sum, width) => sum + width, 0) }}
+          className="w-full table-fixed border-collapse divide-y divide-gray-200 text-[13px]"
         >
-          <colgroup>
-            {columnWidths.map((width, index) => (
-              <col key={index} style={{ width }} />
-            ))}
-          </colgroup>
-          <thead className="sticky top-0 z-10 bg-gray-50">
+          <colgroup><col style={{ width: "15%" }} /><col style={{ width: "19%" }} /><col style={{ width: "10%" }} /><col style={{ width: "26%" }} /><col style={{ width: "17%" }} /><col style={{ width: "13%" }} /></colgroup>
+          <thead className="sticky top-0 z-10 bg-gray-100 max-[1199px]:sr-only">
             <tr>
               <ResizableHeader index={0} widths={columnWidths} setWidths={setColumnWidths}>Raw column</ResizableHeader>
               <ResizableHeader index={1} widths={columnWidths} setWidths={setColumnWidths}>Display label</ResizableHeader>
@@ -301,10 +363,11 @@ export default function SchemaStage() {
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {schema.columns.map((col) => (
+            {visibleColumns.map((col) => (
               <SchemaRow
                 key={col.name}
                 col={col}
+                exampleValues={exampleValuesByColumn[schema.columns.indexOf(col)] ?? []}
                 update={updateSchemaColumn}
                 onAudit={addAuditEntry}
                 ordinalReorderFocusColumn={ordinalReorderFocusColumn}
@@ -314,26 +377,7 @@ export default function SchemaStage() {
           </tbody>
         </table>
       </div>
-      <p className="mt-2 text-xs text-gray-500">Drag a column edge in the header to resize the variable types table.</p>
-
-      <div className="mt-8 flex justify-between">
-        <button
-          onClick={() => setStage(3)}
-          className="px-4 py-2 border border-gray-300 rounded text-gray-700 hover:bg-gray-50"
-        >
-          Back
-        </button>
-        <button
-          onClick={handleNext}
-          data-testid="schema-proceed"
-          className="px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
-          disabled={schema.columns.some(
-            (c) => c.confirmedType === "numeric_encoded_categorical_ambiguous",
-          )}
-        >
-          Proceed
-        </button>
-      </div>
+      <StepActionBar onBack={() => setStage(3)} backLabel="Back" status={{ tone: counts.review ? "warn" : "ok", text: counts.review ? `Resolve ${schema.columns.filter((c) => c.confirmedType === "numeric_encoded_categorical_ambiguous" || (c.confirmedType === "unsupported" && !c.exclusionReason)).map((c) => c.name).join(", ")} (Needs review) to continue` : `All ${schema.columns.length} variables are confirmed.` }} primary={{ label: "Proceed", testId: "schema-proceed", onClick: handleNext, disabledReason: counts.review ? `Resolve ${schema.columns.filter((c) => c.confirmedType === "numeric_encoded_categorical_ambiguous" || (c.confirmedType === "unsupported" && !c.exclusionReason)).map((c) => c.name).join(", ")} (Needs review) to continue` : undefined }} />
     </div>
   );
 }
@@ -384,12 +428,14 @@ function ResizableHeader({
 
 function SchemaRow({
   col,
+  exampleValues,
   update,
   onAudit,
   ordinalReorderFocusColumn,
   setOrdinalReorderFocusColumn,
 }: {
   col: SchemaColumn;
+  exampleValues: string[];
   update: (name: string, up: Partial<SchemaColumn>) => void;
   onAudit: (action: string, details?: Record<string, string | number | boolean | null>) => void;
   ordinalReorderFocusColumn: string | null;
@@ -417,15 +463,15 @@ function SchemaRow({
 
   return (
     <tr className={isExcluded ? "bg-gray-50 opacity-60" : ""}>
-      <td className="overflow-hidden border-r border-gray-200 px-3 py-3 align-top" title={col.name}>
+      <td data-label="Raw column" className="overflow-hidden border-r border-gray-200 px-3 py-3 align-top max-[1199px]:block max-[1199px]:w-full max-[1199px]:border-r-0" title={col.name}>
         <div className="max-w-full truncate font-mono text-xs text-gray-700">{col.name}</div>
         {isExcluded && (
           <div className="mt-1 max-w-full truncate text-xs text-gray-600" title={`Excluded from Table 1: ${col.exclusionReason}`}>
-            - excluded from Table 1: {col.exclusionReason}
+            Excluded from Table 1: {col.exclusionReason}
           </div>
         )}
       </td>
-      <td className="overflow-hidden border-r border-gray-200 px-3 py-3 align-top">
+      <td data-label="Display label" className="overflow-hidden border-r border-gray-200 px-3 py-3 align-top max-[1199px]:block max-[1199px]:w-full max-[1199px]:border-r-0">
         <input
           type="text"
           aria-label={`Display label for ${col.name}`}
@@ -450,12 +496,12 @@ function SchemaRow({
           }}
         />
       </td>
-      <td className="overflow-hidden border-r border-gray-200 px-3 py-3 align-top">
+      <td data-label="Units" className="overflow-hidden border-r border-gray-200 px-3 py-3 align-top max-[1199px]:block max-[1199px]:w-full max-[1199px]:border-r-0">
         <input
           type="text"
           aria-label={`Units for ${col.name}`}
           placeholder="e.g. mg/dL"
-          title={col.units || "Units, for example mg/dL"}
+          title="Shown in Table 1 row labels"
           className="block w-full rounded border border-gray-300 p-1 text-sm"
           value={col.units ?? ""}
           onChange={(e) => update(col.name, { units: e.target.value })}
@@ -475,7 +521,7 @@ function SchemaRow({
           }}
         />
       </td>
-      <td className="overflow-hidden border-r border-gray-200 px-3 py-3 align-top">
+      <td data-label="Type" className="overflow-hidden border-r border-gray-200 px-3 py-3 align-top max-[1199px]:block max-[1199px]:w-full max-[1199px]:border-r-0">
         {isAmbiguous ? (
           <div className="flex min-w-0 flex-col space-y-1">
             <span className="text-xs text-red-600 font-medium">Ambiguous Numeric</span>
@@ -502,7 +548,7 @@ function SchemaRow({
               onChange={(e) => update(col.name, { confirmedType: e.target.value as ColumnType })}
             >
               <option value="" disabled>
-                Select True Type...
+                Select true type…
               </option>
               {TYPE_OPTIONS.map((t) => (
                 <option key={t} value={t}>
@@ -529,19 +575,18 @@ function SchemaRow({
           </select>
         )}
         <div className="mt-1 break-words text-xs text-gray-500">
-          {typeExampleForColumn(col)}; {TYPE_META[col.confirmedType].consequence}
+          {typeExampleForColumn(col, exampleValues)}; {TYPE_META[col.confirmedType].consequence}
         </div>
         {reviewSignal.message && (
           <div
             className="mt-2 rounded border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-900"
             title={reviewSignal.message}
           >
-            <span className="font-semibold">Needs review</span>
             <span className="block">{reviewSignal.message}</span>
           </div>
         )}
       </td>
-      <td className="overflow-hidden border-r border-gray-200 px-3 py-3 align-top">
+      <td data-label="Levels / ordinality" className="overflow-hidden border-r border-gray-200 px-3 py-3 align-top max-[1199px]:block max-[1199px]:w-full max-[1199px]:border-r-0">
         {(col.confirmedType === "categorical_nominal" ||
           col.confirmedType === "categorical_ordinal" ||
           col.confirmedType === "binary") &&
@@ -582,6 +627,8 @@ function SchemaRow({
                     <span className="min-w-0 truncate">{lvl.label}</span>
                     <div className="flex space-x-1">
                       <button
+                        type="button"
+                        aria-label={`Move ${lvl.label} up`}
                         onClick={() => handleLevelMove(idx, -1)}
                         disabled={idx === 0}
                         className="px-1 text-gray-500 hover:text-black disabled:opacity-30"
@@ -589,6 +636,8 @@ function SchemaRow({
                         ↑
                       </button>
                       <button
+                        type="button"
+                        aria-label={`Move ${lvl.label} down`}
                         onClick={() => handleLevelMove(idx, 1)}
                         disabled={idx === (col.levels?.length ?? 0) - 1}
                         className="px-1 text-gray-500 hover:text-black disabled:opacity-30"
@@ -608,7 +657,7 @@ function SchemaRow({
           <span className="text-gray-400 text-sm">-</span>
         )}
       </td>
-      <td className="overflow-hidden px-3 py-3 align-top">
+      <td data-label="Status" className="overflow-hidden px-3 py-3 align-top max-[1199px]:block max-[1199px]:w-full">
         {isExcluded ? (
           <div className="flex min-h-16 flex-col items-start gap-2">
             {reviewSignal.level !== "ok" && <StatusBadge signal={reviewSignal} rawTier={col.cardinalityTier} />}
@@ -618,24 +667,19 @@ function SchemaRow({
               title="Re-include this variable in Table 1. Your source data is unchanged."
               className="mt-auto rounded border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100"
             >
-              Restore
+              Re-include
             </button>
           </div>
         ) : (
           <div className="flex min-h-16 flex-col items-start gap-2">
             {reviewSignal.level !== "ok" && <StatusBadge signal={reviewSignal} rawTier={col.cardinalityTier} />}
-            {reviewSignal.message && (
-              <span className="min-w-0 break-words text-xs text-gray-600" title={reviewSignal.message}>
-                {reviewSignal.message}
-              </span>
-            )}
             <button
               type="button"
               onClick={() => update(col.name, { exclusionReason: "Manually excluded" })}
               title="Your data is unchanged; this only removes the variable from Table 1."
               className="mt-auto rounded border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700 hover:bg-red-100"
             >
-              Exclude this variable
+              Exclude
             </button>
             <span className="sr-only">Your data is unchanged; this only removes the variable from Table 1.</span>
           </div>

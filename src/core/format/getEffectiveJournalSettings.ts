@@ -57,7 +57,8 @@ export function getEffectiveJournalSettings(
     config.p_value_formatting.threshold_low = overrides.pValueThreshold;
   }
 
-  // Apply pValueSignificantDigits override
+  // An explicit decimal override also opts out of the journal's conditional
+  // P-value rounding rules, even when its numeric value equals the default.
   if (overrides.pValueSignificantDigits !== undefined) {
     config.p_value_formatting.max_decimal_places = overrides.pValueSignificantDigits;
     config.p_value_formatting.conditional_decimals = [];

@@ -6,20 +6,21 @@ import { inferSchema } from "../src/core/schema/inference";
 import { runTable1 } from "../src/core/stats/runTable1";
 import { pyodideClient } from "../src/workers/pyodide.client";
 
-const MATERIALS_DIR = path.resolve(__dirname, "../_materials");
+// Historical Node/jsdom timing check; the browser benchmark in tests/bench supersedes it.
+const INTERNAL_STROKE_CSV = path.resolve(__dirname, "../_materials/samples/stroke_risk_dataset_v2.csv");
 
-describe.skipIf(!process.env.PERF_TEST)("Performance Benchmark (D27)", () => {
+describe.skipIf(!process.env.PERF_TEST || !fs.existsSync(INTERNAL_STROKE_CSV))(
+  "Performance Benchmark (D27; internal fixture: stroke_risk_dataset_v2.csv)", () => {
   beforeAll(async () => {
     // Warmup pyodide
     await pyodideClient.isReady();
-  }, 60000);
+  });
 
   it("runs full pipeline on stroke_risk_dataset_v2.csv within 30s", async () => {
     const start = performance.now();
 
     // 1. Data Ingestion
-    const filepath = path.join(MATERIALS_DIR, "stroke_risk_dataset_v2.csv");
-    const buffer = fs.readFileSync(filepath);
+    const buffer = fs.readFileSync(INTERNAL_STROKE_CSV);
     const file = new File([buffer], "stroke_risk_dataset_v2.csv", { type: "text/csv" });
     const df = await parseCSV(file);
 
@@ -63,3 +64,5 @@ describe.skipIf(!process.env.PERF_TEST)("Performance Benchmark (D27)", () => {
     expect(durationMs).toBeLessThanOrEqual(30000);
   }, 35000); // 35s timeout to allow some leeway above 30s assertion
 });
+// Historical Node/jsdom performance check. The real-browser benchmark in tests/bench/
+// supersedes it for reviewer-facing runtime and memory measurements.

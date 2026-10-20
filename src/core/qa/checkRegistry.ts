@@ -1,6 +1,6 @@
 import type { Schema, DataFrame, AnalysisPlan, DataQualityFinding, CheckTier, CheckCategory, CheckStage } from "../types";
 import { detectOutliers } from "./outliers";
-import { stripBracketCodes } from "../format/tableTitle";
+import { getColumnDiagnosticLabel, getColumnDisplayLabel, resolveLevelLabel } from "../format/columnLabel";
 import { buildOutlierFindingDetail } from "../format/outlierNote";
 import { checkColumnBounds, loadBoundsLibrary, type ResearchPopulation, type UnitSystem } from "../bounds/boundsChecker";
 import { useStore } from "../../store";
@@ -24,9 +24,15 @@ export interface CheckDefinition {
   category: CheckCategory;
   stage: CheckStage;
   requiresGrouping: boolean;
+
+
   run: (ctx: CheckContext) => DataQualityFinding[];
 }
 
+export const SMALL_CATEGORY_THRESHOLD = 10;
+
+
+/** Registry of built-in data-quality checks; each definition supplies its stable id, stage, and finding producer. */
 export const CHECK_REGISTRY: CheckDefinition[] = [
   // ==========================================
   // FORMAT GATES (blocking, format, data-review)
@@ -327,7 +333,7 @@ export const CHECK_REGISTRY: CheckDefinition[] = [
         
         if (missingPercent >= 20) {
           const tier = missingPercent >= 30 ? "review" : "advisory";
-          const displayVar = col.displayLabel || stripBracketCodes(col.name);
+          const displayVar = getColumnDiagnosticLabel(col);
           findings.push({
             checkId: `highMissingness_${col.name}`,
             tier,
@@ -361,7 +367,7 @@ export const CHECK_REGISTRY: CheckDefinition[] = [
         
         const out = detectOutliers(data, col.name, "iqr");
         if (out && out.rowIndices.length > 0) {
-          const displayVar = col.displayLabel || stripBracketCodes(col.name);
+          const displayVar = getColumnDiagnosticLabel(col);
           const row1Indexed = out.rowIndices.map(idx => idx + 1);
           const uniqueSampleVals = [...new Set(out.values.map(String))];
           const count = out.rowIndices.length;
@@ -430,7 +436,7 @@ export const CHECK_REGISTRY: CheckDefinition[] = [
         const validCount = values.filter(v => v !== null && v !== undefined && String(v).trim() !== "").length;
         
         if (validCount > 0 && validCount < 30) {
-          const displayVar = col.displayLabel || stripBracketCodes(col.name);
+          const displayVar = getColumnDiagnosticLabel(col);
           const valWord = validCount === 1 ? "value" : "values";
           findings.push({
             checkId: `sampleSize_${col.name}`,
@@ -513,6 +519,49 @@ export const CHECK_REGISTRY: CheckDefinition[] = [
       return [];
     }
   },
+  {
+    id: "groupingVariableReencoding",
+    tier: "advisory",
+    category: "quality",
+    stage: "plan",
+    requiresGrouping: true,
+    run: ({ plan, schema, data }) => {
+      if (!plan?.groupingVariable) return [];
+      const groupingIndex = data.columns.findIndex((column) => column.name === plan.groupingVariable);
+      const groupingColumn = schema.columns.find((column) => column.name === plan.groupingVariable);
+      if (groupingIndex === -1 || !groupingColumn) return [];
+
+      return schema.columns.flatMap((column) => {
+        if (column.name === plan.groupingVariable || column.exclusionReason || !plan.includedVariables?.includes(column.name)) return [];
+        if (!["binary", "categorical_nominal", "categorical_ordinal"].includes(column.confirmedType)) return [];
+        const variableIndex = data.columns.findIndex((dataColumn) => dataColumn.name === column.name);
+        if (variableIndex === -1) return [];
+
+        const groupsByLevel = new Map<string, Set<string>>();
+        for (const row of data.rows) {
+          const group = row[groupingIndex];
+          const level = row[variableIndex];
+          if (isMissingValue(group) || isMissingValue(level)) continue;
+          const groups = groupsByLevel.get(String(level)) ?? new Set<string>();
+          groups.add(String(group));
+          groupsByLevel.set(String(level), groups);
+        }
+
+        if (groupsByLevel.size === 0 || ![...groupsByLevel.values()].every((groups) => groups.size === 1)) return [];
+        const displayVariable = getColumnDisplayLabel(column);
+        const displayGrouping = getColumnDisplayLabel(groupingColumn).toLowerCase();
+        return [{
+          checkId: `groupingVariableReencoding_${column.name}`,
+          tier: "advisory" as const,
+          category: "quality" as const,
+          variable: column.name,
+          title: "This variable may be a re-encoding of the grouping variable",
+          detail: `Every level of "${displayVariable}" occurs in only one ${displayGrouping}, so the variable predicts the group perfectly. If it is a more detailed version of the grouping variable, its P-value is not a finding — it compares the grouping variable with itself — and should be removed while keeping the counts. If the two are genuinely independent measurements, a perfect separation is a real result but the P-value is unstable; report the counts and interpret with care.`,
+          remedy: "Review whether this variable is a more detailed version of the grouping variable. If so, remove it from the comparison while keeping its counts.",
+        }];
+      });
+    },
+  },
 
   // ==========================================
   // BEAUTIFY ADVISORIES (advisory, beautify, data-review)
@@ -583,7 +632,7 @@ export const CHECK_REGISTRY: CheckDefinition[] = [
         );
         
         if (!col.levels || col.levels.length === 0 || !hasDescriptiveLabel) {
-          const displayVar = col.displayLabel || stripBracketCodes(col.name);
+          const displayVar = getColumnDiagnosticLabel(col);
           const sampleCodes = col.levels ? col.levels.map(l => String(l.code)).join("/") : "0/1";
           findings.push({
             checkId: `codedCategoricalNoLabels_${col.name}`,
@@ -600,6 +649,50 @@ export const CHECK_REGISTRY: CheckDefinition[] = [
     }
   },
   {
+    id: "smallCategoryLevel",
+    tier: "advisory",
+    category: "quality",
+    stage: "data-review",
+    requiresGrouping: false,
+    run: ({ schema, data }) => {
+      const findings: DataQualityFinding[] = [];
+      schema.columns.forEach((col) => {
+        if (col.exclusionReason || !["binary", "categorical_nominal", "categorical_ordinal"].includes(col.confirmedType)) return;
+        const colIdx = data.columns.findIndex((dataCol) => dataCol.name === col.name);
+        if (colIdx < 0) return;
+        const counts = new Map<string, number>();
+        data.rows.forEach((row) => {
+          const value = row[colIdx];
+          if (isMissingValue(value)) return;
+          const key = String(value);
+          counts.set(key, (counts.get(key) ?? 0) + 1);
+        });
+        if (counts.size < 2) return;
+        const smallLevels = [...counts.entries()]
+          .filter(([, n]) => n > 0 && n < SMALL_CATEGORY_THRESHOLD)
+          .map(([code, n]) => ({ label: resolveLevelLabel(code, col), n }));
+        if (smallLevels.length === 0) return;
+        const listed = smallLevels.slice(0, 5);
+        const levelList = listed.map(({ label, n }) => `'${label}' (n = ${n})`).join(" and ");
+        const moreText = smallLevels.length > 5 ? ` and ${smallLevels.length - 5} more` : "";
+        const levelsText = listed.length === 1
+          ? `level '${listed[0].label}' has n = ${listed[0].n}, fewer than ${SMALL_CATEGORY_THRESHOLD} observations`
+          : `levels ${levelList}${moreText} have fewer than ${SMALL_CATEGORY_THRESHOLD} observations`;
+        const displayVar = getColumnDisplayLabel(col);
+        findings.push({
+          checkId: `smallCategoryLevel_${col.name}`,
+          tier: "advisory",
+          category: "quality",
+          variable: col.name,
+          title: "Small Category",
+          detail: `Variable '${displayVar}': ${levelsText}. Percentages for this level are unstable and the level may make the table sparse.`,
+          remedy: "Consider combining this level with a related one in your source data, or report it with care. This is advisory; the analysis is unchanged.",
+        });
+      });
+      return findings;
+    },
+  },
+  {
     id: "continuousNoUnits",
     tier: "advisory",
     category: "beautify",
@@ -611,7 +704,7 @@ export const CHECK_REGISTRY: CheckDefinition[] = [
         if (col.exclusionReason) return;
         if (col.confirmedType !== "continuous") return;
         if (!col.units || col.units.trim() === "") {
-          const displayVar = col.displayLabel || stripBracketCodes(col.name);
+          const displayVar = getColumnDiagnosticLabel(col);
           findings.push({
             checkId: `continuousNoUnits_${col.name}`,
             tier: "advisory",
@@ -648,12 +741,14 @@ export const CHECK_REGISTRY: CheckDefinition[] = [
         const result = checkColumnBounds(col, values, library, unitSystem);
         if (!result || result.violations.length === 0) return;
 
-        const displayVar = col.displayLabel || stripBracketCodes(col.name);
+        const displayVar = getColumnDiagnosticLabel(col);
         const n = result.violations.length;
         const sampleValues = [...new Set(result.violations.map((v) => String(v.value)))].slice(0, 10);
         const matchScore = result.matchScore !== undefined ? `, score ${result.matchScore.toFixed(2)}` : "";
         const unitLabel = unitSystem === "imperial" ? "imperial" : "metric";
-        const unitNote = `Bounds assume ${unitLabel} units. If this column uses different units, dismiss this finding.`;
+        const unitNote = col.units?.trim()
+          ? undefined
+          : `Bounds assume ${unitLabel} units. If this column uses different units, dismiss this finding.`;
 
         findings.push({
           checkId: `sanityBounds_${col.name}`,
@@ -668,7 +763,7 @@ export const CHECK_REGISTRY: CheckDefinition[] = [
             `Matched concept: "${result.conceptId}" (${result.matchedBy}${matchScore}). `,
             unitNote,
           ].join(""),
-          remedy: unitNote,
+          remedy: unitNote ?? "Review the flagged values against the declared column unit.",
           affectedCount: n,
           affectedRowsSample: result.violations.map((v) => v.rowIndex + 1).slice(0, 10),
           sampleValues,
@@ -686,6 +781,9 @@ export const CHECK_REGISTRY: CheckDefinition[] = [
   }
 ];
 
+
+
+/** Runs only registry checks for the requested workflow stage and returns their findings without mutating the context. */
 export function runChecks(stage: CheckStage, ctx: CheckContext): DataQualityFinding[] {
   return CHECK_REGISTRY
     .filter(c => c.stage === stage)
@@ -706,4 +804,8 @@ function extractNumericValues(data: DataFrame, columnName: string): (number | nu
     const parsed = Number(text.replace(/,/g, ""));
     return Number.isFinite(parsed) ? parsed : null;
   });
+}
+
+function isMissingValue(value: unknown): boolean {
+  return value === null || value === undefined || String(value).trim() === "";
 }

@@ -1,0 +1,1795 @@
+{
+  "kind": "author-benchmark",
+  "generatedAt": "2026-10-11T12:48:44.355Z",
+  "browser": {
+    "name": "chromium",
+    "version": "147.0.7727.15"
+  },
+  "machine": {
+    "hostname": "LenovoSlim",
+    "cpuModel": "AMD Ryzen 7 8845HS w/ Radeon 780M Graphics",
+    "cores": 16,
+    "totalMemoryBytes": 67975368704,
+    "platform": "win32",
+    "release": "10.0.26200"
+  },
+  "protocol": {
+    "tableRepetitions": 5,
+    "fastModelRepetitions": 3,
+    "thoroughModelRepetitions": 1,
+    "warmCache": "second navigation in same fresh context"
+  },
+  "runs": [
+    {
+      "dataset": "HF",
+      "repetition": 1,
+      "rowCount": 299,
+      "inputColumnCount": 13,
+      "baselineVariableCount": 12,
+      "baselineVariables": [
+        "age",
+        "anaemia",
+        "creatinine_phosphokinase",
+        "diabetes",
+        "ejection_fraction",
+        "high_blood_pressure",
+        "platelets",
+        "serum_creatinine",
+        "serum_sodium",
+        "sex",
+        "smoking"
+      ],
+      "grouping": "DEATH_EVENT",
+      "modelOutcome": "DEATH_EVENT",
+      "modelPredictors": [
+        "age",
+        "anaemia",
+        "creatinine_phosphokinase",
+        "diabetes",
+        "ejection_fraction",
+        "high_blood_pressure",
+        "platelets",
+        "serum_creatinine",
+        "serum_sodium",
+        "sex",
+        "smoking"
+      ],
+      "sizeGateAppeared": false,
+      "sizeGateAcknowledged": false,
+      "status": "ok",
+      "stageReached": "complete",
+      "timings": {
+        "coldLoad_s": 18.3668758,
+        "warmLoad_s": 21.2131473,
+        "import_s": 0.3026802000000025,
+        "qaToPlan_s": 0.10259709999999904,
+        "stats_s": 0.9300089000000007,
+        "docxExport_s": 0.4687479999999996,
+        "baselineTable_s": 1.804034200000002,
+        "modelFast_s": 78.74022880000001,
+        "modelThorough_s": 545.4003448999999
+      },
+      "memory": {
+        "coldLoad": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "warmLoad": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "import": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "qa": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "plan": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "statistics": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "export": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "modelFast": {
+          "wasmPeakMB": 225.247232,
+          "jsHeapMB": 15.2
+        },
+        "modelThorough": {
+          "wasmPeakMB": 225.247232,
+          "jsHeapMB": 15.2
+        }
+      },
+      "coldLoadBytes": 58300531
+    },
+    {
+      "dataset": "HF",
+      "repetition": 2,
+      "rowCount": 299,
+      "inputColumnCount": 13,
+      "baselineVariableCount": 12,
+      "baselineVariables": [
+        "age",
+        "anaemia",
+        "creatinine_phosphokinase",
+        "diabetes",
+        "ejection_fraction",
+        "high_blood_pressure",
+        "platelets",
+        "serum_creatinine",
+        "serum_sodium",
+        "sex",
+        "smoking"
+      ],
+      "grouping": "DEATH_EVENT",
+      "modelOutcome": "DEATH_EVENT",
+      "modelPredictors": [
+        "age",
+        "anaemia",
+        "creatinine_phosphokinase",
+        "diabetes",
+        "ejection_fraction",
+        "high_blood_pressure",
+        "platelets",
+        "serum_creatinine",
+        "serum_sodium",
+        "sex",
+        "smoking"
+      ],
+      "sizeGateAppeared": false,
+      "sizeGateAcknowledged": false,
+      "status": "ok",
+      "stageReached": "complete",
+      "timings": {
+        "coldLoad_s": 19.273282299999963,
+        "warmLoad_s": 20.12371550000005,
+        "import_s": 0.1988031000000192,
+        "qaToPlan_s": 0.08199080000002869,
+        "stats_s": 0.43700089999998454,
+        "docxExport_s": 0.16869189999997616,
+        "baselineTable_s": 0.8864867000000086,
+        "modelFast_s": 79.76142680000001
+      },
+      "memory": {
+        "coldLoad": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "warmLoad": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "import": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "qa": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "plan": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "statistics": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "export": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "modelFast": {
+          "wasmPeakMB": 225.247232,
+          "jsHeapMB": 15.2
+        }
+      },
+      "coldLoadBytes": 58300531
+    },
+    {
+      "dataset": "HF",
+      "repetition": 3,
+      "rowCount": 299,
+      "inputColumnCount": 13,
+      "baselineVariableCount": 12,
+      "baselineVariables": [
+        "age",
+        "anaemia",
+        "creatinine_phosphokinase",
+        "diabetes",
+        "ejection_fraction",
+        "high_blood_pressure",
+        "platelets",
+        "serum_creatinine",
+        "serum_sodium",
+        "sex",
+        "smoking"
+      ],
+      "grouping": "DEATH_EVENT",
+      "modelOutcome": "DEATH_EVENT",
+      "modelPredictors": [
+        "age",
+        "anaemia",
+        "creatinine_phosphokinase",
+        "diabetes",
+        "ejection_fraction",
+        "high_blood_pressure",
+        "platelets",
+        "serum_creatinine",
+        "serum_sodium",
+        "sex",
+        "smoking"
+      ],
+      "sizeGateAppeared": false,
+      "sizeGateAcknowledged": false,
+      "status": "ok",
+      "stageReached": "complete",
+      "timings": {
+        "coldLoad_s": 20.336488699999986,
+        "warmLoad_s": 21.16930500000005,
+        "import_s": 0.20440650000004099,
+        "qaToPlan_s": 0.0826805999999633,
+        "stats_s": 0.45708699999994135,
+        "docxExport_s": 0.20029409999994097,
+        "baselineTable_s": 0.9444681999998865,
+        "modelFast_s": 77.7110257
+      },
+      "memory": {
+        "coldLoad": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "warmLoad": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "import": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "qa": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "plan": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "statistics": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "export": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "modelFast": {
+          "wasmPeakMB": 225.247232,
+          "jsHeapMB": 15.2
+        }
+      },
+      "coldLoadBytes": 58300531
+    },
+    {
+      "dataset": "HF",
+      "repetition": 4,
+      "rowCount": 299,
+      "inputColumnCount": 13,
+      "baselineVariableCount": 12,
+      "baselineVariables": [
+        "age",
+        "anaemia",
+        "creatinine_phosphokinase",
+        "diabetes",
+        "ejection_fraction",
+        "high_blood_pressure",
+        "platelets",
+        "serum_creatinine",
+        "serum_sodium",
+        "sex",
+        "smoking"
+      ],
+      "grouping": "DEATH_EVENT",
+      "modelOutcome": "DEATH_EVENT",
+      "modelPredictors": [
+        "age",
+        "anaemia",
+        "creatinine_phosphokinase",
+        "diabetes",
+        "ejection_fraction",
+        "high_blood_pressure",
+        "platelets",
+        "serum_creatinine",
+        "serum_sodium",
+        "sex",
+        "smoking"
+      ],
+      "sizeGateAppeared": false,
+      "sizeGateAcknowledged": false,
+      "status": "ok",
+      "stageReached": "complete",
+      "timings": {
+        "coldLoad_s": 19.357357699999934,
+        "warmLoad_s": 20.17325669999991,
+        "import_s": 0.20138919999997598,
+        "qaToPlan_s": 0.07364159999997355,
+        "stats_s": 0.44998560000001453,
+        "docxExport_s": 0.15221329999994487,
+        "baselineTable_s": 0.877229699999909
+      },
+      "memory": {
+        "coldLoad": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "warmLoad": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "import": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "qa": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "plan": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "statistics": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "export": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        }
+      },
+      "coldLoadBytes": 58300531
+    },
+    {
+      "dataset": "HF",
+      "repetition": 5,
+      "rowCount": 299,
+      "inputColumnCount": 13,
+      "baselineVariableCount": 12,
+      "baselineVariables": [
+        "age",
+        "anaemia",
+        "creatinine_phosphokinase",
+        "diabetes",
+        "ejection_fraction",
+        "high_blood_pressure",
+        "platelets",
+        "serum_creatinine",
+        "serum_sodium",
+        "sex",
+        "smoking"
+      ],
+      "grouping": "DEATH_EVENT",
+      "modelOutcome": "DEATH_EVENT",
+      "modelPredictors": [
+        "age",
+        "anaemia",
+        "creatinine_phosphokinase",
+        "diabetes",
+        "ejection_fraction",
+        "high_blood_pressure",
+        "platelets",
+        "serum_creatinine",
+        "serum_sodium",
+        "sex",
+        "smoking"
+      ],
+      "sizeGateAppeared": false,
+      "sizeGateAcknowledged": false,
+      "status": "ok",
+      "stageReached": "complete",
+      "timings": {
+        "coldLoad_s": 19.33743889999995,
+        "warmLoad_s": 20.15254330000002,
+        "import_s": 0.20187289999995847,
+        "qaToPlan_s": 0.07967079999996349,
+        "stats_s": 0.9185594000000273,
+        "docxExport_s": 0.15709459999995307,
+        "baselineTable_s": 1.3571976999999025
+      },
+      "memory": {
+        "coldLoad": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "warmLoad": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "import": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "qa": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "plan": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "statistics": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "export": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        }
+      },
+      "coldLoadBytes": 58300531
+    },
+    {
+      "dataset": "Diabetes 20k",
+      "repetition": 1,
+      "rowCount": 20000,
+      "inputColumnCount": 30,
+      "baselineVariableCount": 19,
+      "baselineVariables": [
+        "time_in_hospital",
+        "num_lab_procedures",
+        "num_procedures",
+        "num_medications",
+        "number_outpatient",
+        "number_emergency",
+        "number_inpatient",
+        "number_diagnoses",
+        "race",
+        "gender",
+        "age",
+        "max_glu_serum",
+        "A1Cresult",
+        "metformin",
+        "insulin",
+        "change",
+        "diabetesMed",
+        "medical_specialty_grouped"
+      ],
+      "grouping": "readmitted",
+      "modelOutcome": "readmitted_30d",
+      "modelPredictors": [
+        "age",
+        "time_in_hospital",
+        "num_lab_procedures",
+        "num_medications",
+        "number_inpatient",
+        "number_emergency",
+        "number_diagnoses",
+        "A1Cresult",
+        "insulin",
+        "diabetesMed"
+      ],
+      "sizeGateAppeared": false,
+      "sizeGateAcknowledged": false,
+      "status": "error",
+      "stageReached": "modelFast",
+      "timings": {
+        "coldLoad_s": 19.336775200000034,
+        "warmLoad_s": 21.173410900000018,
+        "import_s": 0.9733784999999916,
+        "qaToPlan_s": 1.5290823999999557,
+        "stats_s": 31.04932709999988,
+        "docxExport_s": 0.17891410000016914,
+        "baselineTable_s": 33.730702099999995
+      },
+      "memory": {
+        "coldLoad": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "warmLoad": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "import": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "qa": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "plan": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "statistics": {
+          "wasmPeakMB": 324.4032,
+          "jsHeapMB": 15.2
+        },
+        "export": {
+          "wasmPeakMB": 324.4032,
+          "jsHeapMB": 15.2
+        }
+      },
+      "coldLoadBytes": 58300531,
+      "error": "locator.selectOption: Error: strict mode violation: getByLabel('Event to model') resolved to 2 elements:\n    1) <select class=\"mt-1 w-full rounded border border-gray-300 bg-white p-2 text-sm\">…</select> aka getByLabel('OutcomeChoose a two-group')\n    2) <select aria-label=\"Event to model\" class=\"mt-1 w-full rounded border border-gray-300 bg-white p-2 text-sm\">…</select> aka getByLabel('Event to model', { exact: true })\n\nCall log:\n\u001b[2m  - waiting for getByLabel('Event to model')\u001b[22m\n"
+    },
+    {
+      "dataset": "Diabetes 20k",
+      "repetition": 2,
+      "rowCount": 20000,
+      "inputColumnCount": 30,
+      "baselineVariableCount": 19,
+      "baselineVariables": [
+        "time_in_hospital",
+        "num_lab_procedures",
+        "num_procedures",
+        "num_medications",
+        "number_outpatient",
+        "number_emergency",
+        "number_inpatient",
+        "number_diagnoses",
+        "race",
+        "gender",
+        "age",
+        "max_glu_serum",
+        "A1Cresult",
+        "metformin",
+        "insulin",
+        "change",
+        "diabetesMed",
+        "medical_specialty_grouped"
+      ],
+      "grouping": "readmitted",
+      "modelOutcome": "readmitted_30d",
+      "modelPredictors": [
+        "age",
+        "time_in_hospital",
+        "num_lab_procedures",
+        "num_medications",
+        "number_inpatient",
+        "number_emergency",
+        "number_diagnoses",
+        "A1Cresult",
+        "insulin",
+        "diabetesMed"
+      ],
+      "sizeGateAppeared": false,
+      "sizeGateAcknowledged": false,
+      "status": "error",
+      "stageReached": "modelFast",
+      "timings": {
+        "coldLoad_s": 20.320473700000207,
+        "warmLoad_s": 20.13009590000007,
+        "import_s": 0.8894179999998305,
+        "qaToPlan_s": 1.4349512000000104,
+        "stats_s": 29.876239700000035,
+        "docxExport_s": 0.19584780000010504,
+        "baselineTable_s": 32.39645669999998
+      },
+      "memory": {
+        "coldLoad": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "warmLoad": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "import": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "qa": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "plan": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "statistics": {
+          "wasmPeakMB": 324.4032,
+          "jsHeapMB": 15.2
+        },
+        "export": {
+          "wasmPeakMB": 324.4032,
+          "jsHeapMB": 15.2
+        }
+      },
+      "coldLoadBytes": 58300531,
+      "error": "locator.selectOption: Error: strict mode violation: getByLabel('Event to model') resolved to 2 elements:\n    1) <select class=\"mt-1 w-full rounded border border-gray-300 bg-white p-2 text-sm\">…</select> aka getByLabel('OutcomeChoose a two-group')\n    2) <select aria-label=\"Event to model\" class=\"mt-1 w-full rounded border border-gray-300 bg-white p-2 text-sm\">…</select> aka getByLabel('Event to model', { exact: true })\n\nCall log:\n\u001b[2m  - waiting for getByLabel('Event to model')\u001b[22m\n"
+    },
+    {
+      "dataset": "Diabetes 20k",
+      "repetition": 3,
+      "rowCount": 20000,
+      "inputColumnCount": 30,
+      "baselineVariableCount": 19,
+      "baselineVariables": [
+        "time_in_hospital",
+        "num_lab_procedures",
+        "num_procedures",
+        "num_medications",
+        "number_outpatient",
+        "number_emergency",
+        "number_inpatient",
+        "number_diagnoses",
+        "race",
+        "gender",
+        "age",
+        "max_glu_serum",
+        "A1Cresult",
+        "metformin",
+        "insulin",
+        "change",
+        "diabetesMed",
+        "medical_specialty_grouped"
+      ],
+      "grouping": "readmitted",
+      "modelOutcome": "readmitted_30d",
+      "modelPredictors": [
+        "age",
+        "time_in_hospital",
+        "num_lab_procedures",
+        "num_medications",
+        "number_inpatient",
+        "number_emergency",
+        "number_diagnoses",
+        "A1Cresult",
+        "insulin",
+        "diabetesMed"
+      ],
+      "sizeGateAppeared": false,
+      "sizeGateAcknowledged": false,
+      "status": "error",
+      "stageReached": "modelFast",
+      "timings": {
+        "coldLoad_s": 19.324495300000066,
+        "warmLoad_s": 20.155003800000063,
+        "import_s": 0.8815449999999255,
+        "qaToPlan_s": 1.3465056999998632,
+        "stats_s": 28.875080199999967,
+        "docxExport_s": 0.18537139999982902,
+        "baselineTable_s": 31.288502299999585
+      },
+      "memory": {
+        "coldLoad": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 18.2
+        },
+        "warmLoad": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 18.2
+        },
+        "import": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 18.2
+        },
+        "qa": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 18.2
+        },
+        "plan": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 18.2
+        },
+        "statistics": {
+          "wasmPeakMB": 324.4032,
+          "jsHeapMB": 18.2
+        },
+        "export": {
+          "wasmPeakMB": 324.4032,
+          "jsHeapMB": 18.2
+        }
+      },
+      "coldLoadBytes": 58300531,
+      "error": "locator.selectOption: Error: strict mode violation: getByLabel('Event to model') resolved to 2 elements:\n    1) <select class=\"mt-1 w-full rounded border border-gray-300 bg-white p-2 text-sm\">…</select> aka getByLabel('OutcomeChoose a two-group')\n    2) <select aria-label=\"Event to model\" class=\"mt-1 w-full rounded border border-gray-300 bg-white p-2 text-sm\">…</select> aka getByLabel('Event to model', { exact: true })\n\nCall log:\n\u001b[2m  - waiting for getByLabel('Event to model')\u001b[22m\n"
+    },
+    {
+      "dataset": "Diabetes 20k",
+      "repetition": 4,
+      "rowCount": 20000,
+      "inputColumnCount": 30,
+      "baselineVariableCount": 19,
+      "baselineVariables": [
+        "time_in_hospital",
+        "num_lab_procedures",
+        "num_procedures",
+        "num_medications",
+        "number_outpatient",
+        "number_emergency",
+        "number_inpatient",
+        "number_diagnoses",
+        "race",
+        "gender",
+        "age",
+        "max_glu_serum",
+        "A1Cresult",
+        "metformin",
+        "insulin",
+        "change",
+        "diabetesMed",
+        "medical_specialty_grouped"
+      ],
+      "grouping": "readmitted",
+      "modelOutcome": "readmitted_30d",
+      "modelPredictors": [
+        "age",
+        "time_in_hospital",
+        "num_lab_procedures",
+        "num_medications",
+        "number_inpatient",
+        "number_emergency",
+        "number_diagnoses",
+        "A1Cresult",
+        "insulin",
+        "diabetesMed"
+      ],
+      "sizeGateAppeared": false,
+      "sizeGateAcknowledged": false,
+      "status": "ok",
+      "stageReached": "complete",
+      "timings": {
+        "coldLoad_s": 18.32346409999998,
+        "warmLoad_s": 18.148626200000056,
+        "import_s": 0.6741008000001312,
+        "qaToPlan_s": 1.0008759000001008,
+        "stats_s": 19.178357599999988,
+        "docxExport_s": 0.15922629999998025,
+        "baselineTable_s": 21.0125606000002
+      },
+      "memory": {
+        "coldLoad": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "warmLoad": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "import": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "qa": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "plan": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 15.2
+        },
+        "statistics": {
+          "wasmPeakMB": 324.4032,
+          "jsHeapMB": 15.2
+        },
+        "export": {
+          "wasmPeakMB": 324.4032,
+          "jsHeapMB": 15.2
+        }
+      },
+      "coldLoadBytes": 58300531
+    },
+    {
+      "dataset": "Diabetes 20k",
+      "repetition": 5,
+      "rowCount": 20000,
+      "inputColumnCount": 30,
+      "baselineVariableCount": 19,
+      "baselineVariables": [
+        "time_in_hospital",
+        "num_lab_procedures",
+        "num_procedures",
+        "num_medications",
+        "number_outpatient",
+        "number_emergency",
+        "number_inpatient",
+        "number_diagnoses",
+        "race",
+        "gender",
+        "age",
+        "max_glu_serum",
+        "A1Cresult",
+        "metformin",
+        "insulin",
+        "change",
+        "diabetesMed",
+        "medical_specialty_grouped"
+      ],
+      "grouping": "readmitted",
+      "modelOutcome": "readmitted_30d",
+      "modelPredictors": [
+        "age",
+        "time_in_hospital",
+        "num_lab_procedures",
+        "num_medications",
+        "number_inpatient",
+        "number_emergency",
+        "number_diagnoses",
+        "A1Cresult",
+        "insulin",
+        "diabetesMed"
+      ],
+      "sizeGateAppeared": false,
+      "sizeGateAcknowledged": false,
+      "status": "ok",
+      "stageReached": "complete",
+      "timings": {
+        "coldLoad_s": 13.254341299999972,
+        "warmLoad_s": 14.121902299999958,
+        "import_s": 0.6522634999998845,
+        "qaToPlan_s": 0.8782979999999516,
+        "stats_s": 20.380804699999977,
+        "docxExport_s": 0.15554169999994338,
+        "baselineTable_s": 22.06690789999976
+      },
+      "memory": {
+        "coldLoad": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 17.1
+        },
+        "warmLoad": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 17.1
+        },
+        "import": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 17.1
+        },
+        "qa": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 17.1
+        },
+        "plan": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 17.1
+        },
+        "statistics": {
+          "wasmPeakMB": 324.4032,
+          "jsHeapMB": 17.1
+        },
+        "export": {
+          "wasmPeakMB": 324.4032,
+          "jsHeapMB": 17.1
+        }
+      },
+      "coldLoadBytes": 58300531
+    },
+    {
+      "dataset": "Diabetes 70k",
+      "repetition": 1,
+      "rowCount": 69973,
+      "inputColumnCount": 30,
+      "baselineVariableCount": 19,
+      "baselineVariables": [
+        "time_in_hospital",
+        "num_lab_procedures",
+        "num_procedures",
+        "num_medications",
+        "number_outpatient",
+        "number_emergency",
+        "number_inpatient",
+        "number_diagnoses",
+        "race",
+        "gender",
+        "age",
+        "max_glu_serum",
+        "A1Cresult",
+        "metformin",
+        "insulin",
+        "change",
+        "diabetesMed",
+        "medical_specialty_grouped"
+      ],
+      "grouping": "readmitted",
+      "modelOutcome": "readmitted_30d",
+      "modelPredictors": [
+        "age",
+        "time_in_hospital",
+        "num_lab_procedures",
+        "num_medications",
+        "number_inpatient",
+        "number_emergency",
+        "number_diagnoses",
+        "A1Cresult",
+        "insulin",
+        "diabetesMed"
+      ],
+      "sizeGateAppeared": false,
+      "sizeGateAcknowledged": false,
+      "status": "error",
+      "stageReached": "modelFast",
+      "timings": {
+        "coldLoad_s": 13.264569299999858,
+        "warmLoad_s": 14.113826300000074,
+        "import_s": 1.9651790000000038,
+        "qaToPlan_s": 4.390539000000106,
+        "stats_s": 62.84213230000017,
+        "docxExport_s": 0.15112859999993816,
+        "baselineTable_s": 69.34897890000022
+      },
+      "memory": {
+        "coldLoad": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 17.1
+        },
+        "warmLoad": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 17.1
+        },
+        "import": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 17.1
+        },
+        "qa": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 17.1
+        },
+        "plan": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 17.1
+        },
+        "statistics": {
+          "wasmPeakMB": 796.000256,
+          "jsHeapMB": 17.1
+        },
+        "export": {
+          "wasmPeakMB": 796.000256,
+          "jsHeapMB": 17.1
+        }
+      },
+      "coldLoadBytes": 58300531,
+      "error": "locator.selectOption: Error: strict mode violation: getByLabel('Event to model') resolved to 2 elements:\n    1) <select class=\"mt-1 w-full rounded border border-gray-300 bg-white p-2 text-sm\">…</select> aka getByLabel('OutcomeChoose a two-group')\n    2) <select aria-label=\"Event to model\" class=\"mt-1 w-full rounded border border-gray-300 bg-white p-2 text-sm\">…</select> aka getByLabel('Event to model', { exact: true })\n\nCall log:\n\u001b[2m  - waiting for getByLabel('Event to model')\u001b[22m\n"
+    },
+    {
+      "dataset": "Diabetes 70k",
+      "repetition": 2,
+      "rowCount": 69973,
+      "inputColumnCount": 30,
+      "baselineVariableCount": 19,
+      "baselineVariables": [
+        "time_in_hospital",
+        "num_lab_procedures",
+        "num_procedures",
+        "num_medications",
+        "number_outpatient",
+        "number_emergency",
+        "number_inpatient",
+        "number_diagnoses",
+        "race",
+        "gender",
+        "age",
+        "max_glu_serum",
+        "A1Cresult",
+        "metformin",
+        "insulin",
+        "change",
+        "diabetesMed",
+        "medical_specialty_grouped"
+      ],
+      "grouping": "readmitted",
+      "modelOutcome": "readmitted_30d",
+      "modelPredictors": [
+        "age",
+        "time_in_hospital",
+        "num_lab_procedures",
+        "num_medications",
+        "number_inpatient",
+        "number_emergency",
+        "number_diagnoses",
+        "A1Cresult",
+        "insulin",
+        "diabetesMed"
+      ],
+      "sizeGateAppeared": false,
+      "sizeGateAcknowledged": false,
+      "status": "error",
+      "stageReached": "modelFast",
+      "timings": {
+        "coldLoad_s": 14.279426699999952,
+        "warmLoad_s": 14.126265200000024,
+        "import_s": 1.9457973000002093,
+        "qaToPlan_s": 4.5043611000000965,
+        "stats_s": 62.00740989999985,
+        "docxExport_s": 0.15839919999986887,
+        "baselineTable_s": 68.61596750000002
+      },
+      "memory": {
+        "coldLoad": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 17.1
+        },
+        "warmLoad": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 17.1
+        },
+        "import": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 17.1
+        },
+        "qa": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 17.1
+        },
+        "plan": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 17.1
+        },
+        "statistics": {
+          "wasmPeakMB": 795.803648,
+          "jsHeapMB": 17.1
+        },
+        "export": {
+          "wasmPeakMB": 795.803648,
+          "jsHeapMB": 17.1
+        }
+      },
+      "coldLoadBytes": 58300531,
+      "error": "locator.selectOption: Error: strict mode violation: getByLabel('Event to model') resolved to 2 elements:\n    1) <select class=\"mt-1 w-full rounded border border-gray-300 bg-white p-2 text-sm\">…</select> aka getByLabel('OutcomeChoose a two-group')\n    2) <select aria-label=\"Event to model\" class=\"mt-1 w-full rounded border border-gray-300 bg-white p-2 text-sm\">…</select> aka getByLabel('Event to model', { exact: true })\n\nCall log:\n\u001b[2m  - waiting for getByLabel('Event to model')\u001b[22m\n"
+    },
+    {
+      "dataset": "Diabetes 70k",
+      "repetition": 3,
+      "rowCount": 69973,
+      "inputColumnCount": 30,
+      "baselineVariableCount": 19,
+      "baselineVariables": [
+        "time_in_hospital",
+        "num_lab_procedures",
+        "num_procedures",
+        "num_medications",
+        "number_outpatient",
+        "number_emergency",
+        "number_inpatient",
+        "number_diagnoses",
+        "race",
+        "gender",
+        "age",
+        "max_glu_serum",
+        "A1Cresult",
+        "metformin",
+        "insulin",
+        "change",
+        "diabetesMed",
+        "medical_specialty_grouped"
+      ],
+      "grouping": "readmitted",
+      "modelOutcome": "readmitted_30d",
+      "modelPredictors": [
+        "age",
+        "time_in_hospital",
+        "num_lab_procedures",
+        "num_medications",
+        "number_inpatient",
+        "number_emergency",
+        "number_diagnoses",
+        "A1Cresult",
+        "insulin",
+        "diabetesMed"
+      ],
+      "sizeGateAppeared": false,
+      "sizeGateAcknowledged": false,
+      "status": "error",
+      "stageReached": "modelFast",
+      "timings": {
+        "coldLoad_s": 14.282389500000049,
+        "warmLoad_s": 15.105214500000002,
+        "import_s": 1.9799405999998563,
+        "qaToPlan_s": 4.501103200000013,
+        "stats_s": 63.03352049999987,
+        "docxExport_s": 0.15938559999992138,
+        "baselineTable_s": 69.67394989999966
+      },
+      "memory": {
+        "coldLoad": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 17.1
+        },
+        "warmLoad": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 17.1
+        },
+        "import": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 17.1
+        },
+        "qa": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 17.1
+        },
+        "plan": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 17.1
+        },
+        "statistics": {
+          "wasmPeakMB": 795.60704,
+          "jsHeapMB": 17.1
+        },
+        "export": {
+          "wasmPeakMB": 795.60704,
+          "jsHeapMB": 17.1
+        }
+      },
+      "coldLoadBytes": 58300531,
+      "error": "locator.selectOption: Error: strict mode violation: getByLabel('Event to model') resolved to 2 elements:\n    1) <select class=\"mt-1 w-full rounded border border-gray-300 bg-white p-2 text-sm\">…</select> aka getByLabel('OutcomeChoose a two-group')\n    2) <select aria-label=\"Event to model\" class=\"mt-1 w-full rounded border border-gray-300 bg-white p-2 text-sm\">…</select> aka getByLabel('Event to model', { exact: true })\n\nCall log:\n\u001b[2m  - waiting for getByLabel('Event to model')\u001b[22m\n"
+    },
+    {
+      "dataset": "Diabetes 70k",
+      "repetition": 4,
+      "rowCount": 69973,
+      "inputColumnCount": 30,
+      "baselineVariableCount": 19,
+      "baselineVariables": [
+        "time_in_hospital",
+        "num_lab_procedures",
+        "num_procedures",
+        "num_medications",
+        "number_outpatient",
+        "number_emergency",
+        "number_inpatient",
+        "number_diagnoses",
+        "race",
+        "gender",
+        "age",
+        "max_glu_serum",
+        "A1Cresult",
+        "metformin",
+        "insulin",
+        "change",
+        "diabetesMed",
+        "medical_specialty_grouped"
+      ],
+      "grouping": "readmitted",
+      "modelOutcome": "readmitted_30d",
+      "modelPredictors": [
+        "age",
+        "time_in_hospital",
+        "num_lab_procedures",
+        "num_medications",
+        "number_inpatient",
+        "number_emergency",
+        "number_diagnoses",
+        "A1Cresult",
+        "insulin",
+        "diabetesMed"
+      ],
+      "sizeGateAppeared": false,
+      "sizeGateAcknowledged": false,
+      "status": "ok",
+      "stageReached": "complete",
+      "timings": {
+        "coldLoad_s": 14.310103399999905,
+        "warmLoad_s": 14.120444699999876,
+        "import_s": 2.1781976999999024,
+        "qaToPlan_s": 4.5429137999999805,
+        "stats_s": 60.73142859999999,
+        "docxExport_s": 0.1575561999999918,
+        "baselineTable_s": 67.61009629999985
+      },
+      "memory": {
+        "coldLoad": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 17.1
+        },
+        "warmLoad": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 17.1
+        },
+        "import": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 17.1
+        },
+        "qa": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 17.1
+        },
+        "plan": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 17.1
+        },
+        "statistics": {
+          "wasmPeakMB": 795.672576,
+          "jsHeapMB": 17.1
+        },
+        "export": {
+          "wasmPeakMB": 795.672576,
+          "jsHeapMB": 17.1
+        }
+      },
+      "coldLoadBytes": 58300531
+    },
+    {
+      "dataset": "Diabetes 70k",
+      "repetition": 5,
+      "rowCount": 69973,
+      "inputColumnCount": 30,
+      "baselineVariableCount": 19,
+      "baselineVariables": [
+        "time_in_hospital",
+        "num_lab_procedures",
+        "num_procedures",
+        "num_medications",
+        "number_outpatient",
+        "number_emergency",
+        "number_inpatient",
+        "number_diagnoses",
+        "race",
+        "gender",
+        "age",
+        "max_glu_serum",
+        "A1Cresult",
+        "metformin",
+        "insulin",
+        "change",
+        "diabetesMed",
+        "medical_specialty_grouped"
+      ],
+      "grouping": "readmitted",
+      "modelOutcome": "readmitted_30d",
+      "modelPredictors": [
+        "age",
+        "time_in_hospital",
+        "num_lab_procedures",
+        "num_medications",
+        "number_inpatient",
+        "number_emergency",
+        "number_diagnoses",
+        "A1Cresult",
+        "insulin",
+        "diabetesMed"
+      ],
+      "sizeGateAppeared": false,
+      "sizeGateAcknowledged": false,
+      "status": "ok",
+      "stageReached": "complete",
+      "timings": {
+        "coldLoad_s": 14.321244500000029,
+        "warmLoad_s": 14.10980979999993,
+        "import_s": 1.9492094999998808,
+        "qaToPlan_s": 4.526654900000198,
+        "stats_s": 60.82554339999985,
+        "docxExport_s": 0.15205609999992883,
+        "baselineTable_s": 67.45346389999986
+      },
+      "memory": {
+        "coldLoad": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 17.1
+        },
+        "warmLoad": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 17.1
+        },
+        "import": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 17.1
+        },
+        "qa": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 17.1
+        },
+        "plan": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 17.1
+        },
+        "statistics": {
+          "wasmPeakMB": 796.2624,
+          "jsHeapMB": 17.1
+        },
+        "export": {
+          "wasmPeakMB": 796.2624,
+          "jsHeapMB": 17.1
+        }
+      },
+      "coldLoadBytes": 58300531
+    },
+    {
+      "dataset": "Synthetic 150k",
+      "repetition": 1,
+      "rowCount": 150000,
+      "inputColumnCount": 30,
+      "baselineVariableCount": 19,
+      "baselineVariables": [
+        "time_in_hospital",
+        "num_lab_procedures",
+        "num_procedures",
+        "num_medications",
+        "number_outpatient",
+        "number_emergency",
+        "number_inpatient",
+        "number_diagnoses",
+        "race",
+        "gender",
+        "age",
+        "max_glu_serum",
+        "A1Cresult",
+        "metformin",
+        "insulin",
+        "change",
+        "diabetesMed",
+        "medical_specialty_grouped"
+      ],
+      "grouping": "readmitted",
+      "modelOutcome": null,
+      "modelPredictors": [],
+      "sizeGateAppeared": false,
+      "sizeGateAcknowledged": false,
+      "status": "timeout",
+      "stageReached": "import",
+      "timings": {
+        "coldLoad_s": 14.302622800000012,
+        "warmLoad_s": 14.10822259999998
+      },
+      "memory": {
+        "coldLoad": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 17.1
+        },
+        "warmLoad": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 17.1
+        }
+      },
+      "coldLoadBytes": 58300531,
+      "error": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: getByTestId('schema-proceed')\nExpected: visible\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for getByTestId('schema-proceed')\u001b[22m\n"
+    },
+    {
+      "dataset": "Synthetic 150k",
+      "repetition": 2,
+      "rowCount": 150000,
+      "inputColumnCount": 30,
+      "baselineVariableCount": 19,
+      "baselineVariables": [
+        "time_in_hospital",
+        "num_lab_procedures",
+        "num_procedures",
+        "num_medications",
+        "number_outpatient",
+        "number_emergency",
+        "number_inpatient",
+        "number_diagnoses",
+        "race",
+        "gender",
+        "age",
+        "max_glu_serum",
+        "A1Cresult",
+        "metformin",
+        "insulin",
+        "change",
+        "diabetesMed",
+        "medical_specialty_grouped"
+      ],
+      "grouping": "readmitted",
+      "modelOutcome": null,
+      "modelPredictors": [],
+      "sizeGateAppeared": false,
+      "sizeGateAcknowledged": false,
+      "status": "timeout",
+      "stageReached": "import",
+      "timings": {
+        "coldLoad_s": 13.290057100000093,
+        "warmLoad_s": 14.098806300000055
+      },
+      "memory": {
+        "coldLoad": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 17.1
+        },
+        "warmLoad": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 17.1
+        }
+      },
+      "coldLoadBytes": 58300531,
+      "error": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: getByTestId('schema-proceed')\nExpected: visible\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for getByTestId('schema-proceed')\u001b[22m\n"
+    },
+    {
+      "dataset": "Synthetic 150k",
+      "repetition": 3,
+      "rowCount": 150000,
+      "inputColumnCount": 30,
+      "baselineVariableCount": 19,
+      "baselineVariables": [
+        "time_in_hospital",
+        "num_lab_procedures",
+        "num_procedures",
+        "num_medications",
+        "number_outpatient",
+        "number_emergency",
+        "number_inpatient",
+        "number_diagnoses",
+        "race",
+        "gender",
+        "age",
+        "max_glu_serum",
+        "A1Cresult",
+        "metformin",
+        "insulin",
+        "change",
+        "diabetesMed",
+        "medical_specialty_grouped"
+      ],
+      "grouping": "readmitted",
+      "modelOutcome": null,
+      "modelPredictors": [],
+      "sizeGateAppeared": false,
+      "sizeGateAcknowledged": false,
+      "status": "timeout",
+      "stageReached": "import",
+      "timings": {
+        "coldLoad_s": 14.263881100000114,
+        "warmLoad_s": 14.10590820000018
+      },
+      "memory": {
+        "coldLoad": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 17.1
+        },
+        "warmLoad": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 17.1
+        }
+      },
+      "coldLoadBytes": 58300531,
+      "error": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: getByTestId('schema-proceed')\nExpected: visible\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for getByTestId('schema-proceed')\u001b[22m\n"
+    },
+    {
+      "dataset": "Synthetic 150k",
+      "repetition": 4,
+      "rowCount": 150000,
+      "inputColumnCount": 30,
+      "baselineVariableCount": 19,
+      "baselineVariables": [
+        "time_in_hospital",
+        "num_lab_procedures",
+        "num_procedures",
+        "num_medications",
+        "number_outpatient",
+        "number_emergency",
+        "number_inpatient",
+        "number_diagnoses",
+        "race",
+        "gender",
+        "age",
+        "max_glu_serum",
+        "A1Cresult",
+        "metformin",
+        "insulin",
+        "change",
+        "diabetesMed",
+        "medical_specialty_grouped"
+      ],
+      "grouping": "readmitted",
+      "modelOutcome": null,
+      "modelPredictors": [],
+      "sizeGateAppeared": false,
+      "sizeGateAcknowledged": false,
+      "status": "timeout",
+      "stageReached": "import",
+      "timings": {
+        "coldLoad_s": 14.273447600000072,
+        "warmLoad_s": 14.093011799999978
+      },
+      "memory": {
+        "coldLoad": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 17.1
+        },
+        "warmLoad": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 17.1
+        }
+      },
+      "coldLoadBytes": 58300531,
+      "error": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: getByTestId('schema-proceed')\nExpected: visible\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for getByTestId('schema-proceed')\u001b[22m\n"
+    },
+    {
+      "dataset": "Synthetic 150k",
+      "repetition": 5,
+      "rowCount": 150000,
+      "inputColumnCount": 30,
+      "baselineVariableCount": 19,
+      "baselineVariables": [
+        "time_in_hospital",
+        "num_lab_procedures",
+        "num_procedures",
+        "num_medications",
+        "number_outpatient",
+        "number_emergency",
+        "number_inpatient",
+        "number_diagnoses",
+        "race",
+        "gender",
+        "age",
+        "max_glu_serum",
+        "A1Cresult",
+        "metformin",
+        "insulin",
+        "change",
+        "diabetesMed",
+        "medical_specialty_grouped"
+      ],
+      "grouping": "readmitted",
+      "modelOutcome": null,
+      "modelPredictors": [],
+      "sizeGateAppeared": false,
+      "sizeGateAcknowledged": false,
+      "status": "timeout",
+      "stageReached": "import",
+      "timings": {
+        "coldLoad_s": 13.274013999999967,
+        "warmLoad_s": 14.121027699999978
+      },
+      "memory": {
+        "coldLoad": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 16.1
+        },
+        "warmLoad": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 16.1
+        }
+      },
+      "coldLoadBytes": 58300531,
+      "error": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: getByTestId('schema-proceed')\nExpected: visible\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for getByTestId('schema-proceed')\u001b[22m\n"
+    },
+    {
+      "dataset": "Synthetic 300k",
+      "repetition": 1,
+      "rowCount": 300000,
+      "inputColumnCount": 30,
+      "baselineVariableCount": 19,
+      "baselineVariables": [
+        "time_in_hospital",
+        "num_lab_procedures",
+        "num_procedures",
+        "num_medications",
+        "number_outpatient",
+        "number_emergency",
+        "number_inpatient",
+        "number_diagnoses",
+        "race",
+        "gender",
+        "age",
+        "max_glu_serum",
+        "A1Cresult",
+        "metformin",
+        "insulin",
+        "change",
+        "diabetesMed",
+        "medical_specialty_grouped"
+      ],
+      "grouping": "readmitted",
+      "modelOutcome": null,
+      "modelPredictors": [],
+      "sizeGateAppeared": false,
+      "sizeGateAcknowledged": false,
+      "status": "timeout",
+      "stageReached": "import",
+      "timings": {
+        "coldLoad_s": 14.270434599999804,
+        "warmLoad_s": 14.1075848999999
+      },
+      "memory": {
+        "coldLoad": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 17.1
+        },
+        "warmLoad": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 17.1
+        }
+      },
+      "coldLoadBytes": 58300531,
+      "error": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: getByTestId('schema-proceed')\nExpected: visible\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for getByTestId('schema-proceed')\u001b[22m\n"
+    },
+    {
+      "dataset": "Synthetic 300k",
+      "repetition": 2,
+      "rowCount": 300000,
+      "inputColumnCount": 30,
+      "baselineVariableCount": 19,
+      "baselineVariables": [
+        "time_in_hospital",
+        "num_lab_procedures",
+        "num_procedures",
+        "num_medications",
+        "number_outpatient",
+        "number_emergency",
+        "number_inpatient",
+        "number_diagnoses",
+        "race",
+        "gender",
+        "age",
+        "max_glu_serum",
+        "A1Cresult",
+        "metformin",
+        "insulin",
+        "change",
+        "diabetesMed",
+        "medical_specialty_grouped"
+      ],
+      "grouping": "readmitted",
+      "modelOutcome": null,
+      "modelPredictors": [],
+      "sizeGateAppeared": false,
+      "sizeGateAcknowledged": false,
+      "status": "timeout",
+      "stageReached": "import",
+      "timings": {
+        "coldLoad_s": 14.289714999999852,
+        "warmLoad_s": 14.117872599999886
+      },
+      "memory": {
+        "coldLoad": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 17.1
+        },
+        "warmLoad": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 17.1
+        }
+      },
+      "coldLoadBytes": 58300531,
+      "error": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: getByTestId('schema-proceed')\nExpected: visible\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for getByTestId('schema-proceed')\u001b[22m\n"
+    },
+    {
+      "dataset": "Synthetic 300k",
+      "repetition": 3,
+      "rowCount": 300000,
+      "inputColumnCount": 30,
+      "baselineVariableCount": 19,
+      "baselineVariables": [
+        "time_in_hospital",
+        "num_lab_procedures",
+        "num_procedures",
+        "num_medications",
+        "number_outpatient",
+        "number_emergency",
+        "number_inpatient",
+        "number_diagnoses",
+        "race",
+        "gender",
+        "age",
+        "max_glu_serum",
+        "A1Cresult",
+        "metformin",
+        "insulin",
+        "change",
+        "diabetesMed",
+        "medical_specialty_grouped"
+      ],
+      "grouping": "readmitted",
+      "modelOutcome": null,
+      "modelPredictors": [],
+      "sizeGateAppeared": false,
+      "sizeGateAcknowledged": false,
+      "status": "timeout",
+      "stageReached": "import",
+      "timings": {
+        "coldLoad_s": 14.267853499999969,
+        "warmLoad_s": 14.10514490000019
+      },
+      "memory": {
+        "coldLoad": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 17.1
+        },
+        "warmLoad": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 17.1
+        }
+      },
+      "coldLoadBytes": 58300531,
+      "error": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: getByTestId('schema-proceed')\nExpected: visible\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for getByTestId('schema-proceed')\u001b[22m\n"
+    },
+    {
+      "dataset": "Synthetic 300k",
+      "repetition": 4,
+      "rowCount": 300000,
+      "inputColumnCount": 30,
+      "baselineVariableCount": 19,
+      "baselineVariables": [
+        "time_in_hospital",
+        "num_lab_procedures",
+        "num_procedures",
+        "num_medications",
+        "number_outpatient",
+        "number_emergency",
+        "number_inpatient",
+        "number_diagnoses",
+        "race",
+        "gender",
+        "age",
+        "max_glu_serum",
+        "A1Cresult",
+        "metformin",
+        "insulin",
+        "change",
+        "diabetesMed",
+        "medical_specialty_grouped"
+      ],
+      "grouping": "readmitted",
+      "modelOutcome": null,
+      "modelPredictors": [],
+      "sizeGateAppeared": false,
+      "sizeGateAcknowledged": false,
+      "status": "timeout",
+      "stageReached": "import",
+      "timings": {
+        "coldLoad_s": 14.267657999999821,
+        "warmLoad_s": 15.564666499999818
+      },
+      "memory": {
+        "coldLoad": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 17.1
+        },
+        "warmLoad": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 17.1
+        }
+      },
+      "coldLoadBytes": 58300531,
+      "error": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: getByTestId('schema-proceed')\nExpected: visible\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for getByTestId('schema-proceed')\u001b[22m\n"
+    },
+    {
+      "dataset": "Synthetic 300k",
+      "repetition": 5,
+      "rowCount": 300000,
+      "inputColumnCount": 30,
+      "baselineVariableCount": 19,
+      "baselineVariables": [
+        "time_in_hospital",
+        "num_lab_procedures",
+        "num_procedures",
+        "num_medications",
+        "number_outpatient",
+        "number_emergency",
+        "number_inpatient",
+        "number_diagnoses",
+        "race",
+        "gender",
+        "age",
+        "max_glu_serum",
+        "A1Cresult",
+        "metformin",
+        "insulin",
+        "change",
+        "diabetesMed",
+        "medical_specialty_grouped"
+      ],
+      "grouping": "readmitted",
+      "modelOutcome": null,
+      "modelPredictors": [],
+      "sizeGateAppeared": false,
+      "sizeGateAcknowledged": false,
+      "status": "timeout",
+      "stageReached": "import",
+      "timings": {
+        "coldLoad_s": 14.270973900000099,
+        "warmLoad_s": 14.135522300000302
+      },
+      "memory": {
+        "coldLoad": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 17.1
+        },
+        "warmLoad": {
+          "wasmPeakMB": 187.695104,
+          "jsHeapMB": 17.1
+        }
+      },
+      "coldLoadBytes": 58300531,
+      "error": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: getByTestId('schema-proceed')\nExpected: visible\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for getByTestId('schema-proceed')\u001b[22m\n"
+    }
+  ]
+}

@@ -1,8 +1,13 @@
 export const LARGE_N_NOTICE_THRESHOLD = 50_000;
 export const LARGE_N_CONFIRM_THRESHOLD = 150_000;
+export const MAX_DATA_ROWS = 100_000;
+
+export function describeRowLimitExceeded(n: number): string {
+  return `This file has ${n.toLocaleString()} data rows, above the ${MAX_DATA_ROWS.toLocaleString()}-row limit. EasyTableOne runs the whole analysis in your browser's memory, and larger files can exhaust it. Try analysing a random subsample or a subset of rows, such as one period or site.`;
+}
 
 export function describeLargeNNotice(n: number): string {
-  return `This file has ${n.toLocaleString()} rows. EasyTableOne runs entirely in your browser, so Table 1 and EDA on a dataset this size may take longer to compute but will work normally. If you plan to use the optional Modeling step later, it has its own guardrails above ${LARGE_N_NOTICE_THRESHOLD.toLocaleString()} and ${LARGE_N_CONFIRM_THRESHOLD.toLocaleString()} rows.`;
+  return `This file has ${n.toLocaleString()} rows. EasyTableOne runs entirely in your browser, so Table 1 and EDA on a dataset this size may take longer to compute.`;
 }
 
 export function describeLargeNAdvisory(n: number, fastMode: boolean): string {

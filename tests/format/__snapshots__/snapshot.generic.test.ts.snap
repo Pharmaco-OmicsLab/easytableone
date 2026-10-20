@@ -21,7 +21,7 @@ exports[`FormatTable - GENERIC > formats correctly against snapshot 1`] = `
     "P-value",
   ],
   "journal": "GENERIC",
-  "methodsParagraph": "Continuous variables that met the normality assumption were summarized as mean (SD) and compared between groups using Welch's t-test. Continuous variables that did not meet the normality assumption were summarized as median (IQR) and compared using the Mann-Whitney U test. Normality was assessed by Shapiro-Wilk for n ≤ 2000 and by skewness/kurtosis criterion (|skew| < 1 and |excess kurtosis| < 1) for n > 2000. Categorical variables were summarized as n (%) and compared using the chi-square test. Standardized mean differences (SMD) are reported alongside P-values; SMD > 0.1 is conventionally interpreted as imbalanced. Analyses were performed in EasyTableOne v1.0.0-test (ruleset v1.4) using scipy v1.0, numpy v1.0, pandas v1.0, statsmodels v1.0 on Pyodide 0.30.0.dev0 (CPython 3.14.0, WebAssembly, in-browser; no server).",
+  "methodsParagraph": "Continuous variables that met the normality assumption were summarized as mean (SD) and compared between groups using Welch's t-test. Continuous variables that did not meet the normality assumption were summarized as median (IQR) and compared using the Mann-Whitney U test. Normality was assessed by Shapiro-Wilk for n ≤ 2000 and by skewness/kurtosis criterion (|skew| < 1 and |excess kurtosis| < 1) for n > 2000. Categorical variables were summarized as n (%) and compared using the chi-square test. Standardized mean differences (SMD) are reported alongside P-values; SMD > 0.1 is conventionally interpreted as imbalanced. Analyses were performed in EasyTableOne v1.0.0-test (ruleset v1.7) using scipy v1.0, numpy v1.0, pandas v1.0, statsmodels v1.0 on Pyodide 0.30.0.dev0 (CPython 3.14.0, WebAssembly, in-browser; no server).",
   "rows": [
     {
       "cells": [
@@ -110,7 +110,7 @@ exports[`FormatTable - GENERIC > formats correctly against snapshot 1`] = `
       "isSubgroup": true,
     },
   ],
-  "rulesetVersion": "1.4",
+  "rulesetVersion": "1.7",
   "title": "Table 1: Baseline Characteristics, by group",
 }
 `;

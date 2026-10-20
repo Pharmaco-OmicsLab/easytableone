@@ -1,6 +1,7 @@
 import type { AnalysisPlan, FormattedTable, Schema, StatisticalResults, DataQualityRecord, UserOverrides } from "../types";
 import { effectiveIncludeOutcome, type ModelingResults } from "../modeling/types";
 import { journalRulesets } from "../format/formatTable";
+import { AGGREGATE_ONLY_NOTICE, toAggregateResults } from "./aggregateOnly";
 import { PYODIDE_VERSION, pyodideRuntimeLabel } from "../runtimeEnvironment";
 
 export interface ReproducibilityWarning {
@@ -9,12 +10,15 @@ export interface ReproducibilityWarning {
   category: string;
   variable?: string;
   title: string;
+  detail?: string;
   affectedCount?: number;
   response: string;
   timestamp: string;
   fixDetails?: string;
   metadataOnly?: Record<string, string | number | boolean | null>;
 }
+
+
 
 export function toReproducibilityWarning(record: DataQualityRecord): ReproducibilityWarning {
   return {
@@ -23,6 +27,7 @@ export function toReproducibilityWarning(record: DataQualityRecord): Reproducibi
     category: record.finding.category,
     variable: record.finding.variable,
     title: record.finding.title,
+    ...(record.finding.checkId.startsWith("smallCategoryLevel_") ? { detail: record.finding.detail } : {}),
     affectedCount: record.finding.affectedCount,
     response: record.response,
     timestamp: record.timestamp,
@@ -37,6 +42,8 @@ export interface UserOverrideMetadata {
   overrideValue: any;
   timestamp: string;
 }
+
+
 
 export function compileUserOverrides(
   overrides: UserOverrides | undefined,
@@ -163,8 +170,11 @@ export function compileUserOverrides(
 }
 
 export interface ReproducibilityData {
+  /** Phase 51 R1 (D105a): states that the record is aggregate-only. */
+  aggregateOnlyNotice: string;
   appVersion: string;
   rulesetVersion: string;
+  rulesetProvenance: import("../types").JournalConfig["provenance"];
   libraryVersions: Record<string, string>;
   analysisPlan: AnalysisPlan;
   schema: Schema;
@@ -294,6 +304,13 @@ function compactMlSubgroups(models: NonNullable<ModelingResults["ml"]>["models"]
   return Object.fromEntries(entries);
 }
 
+
+
+/**
+ * Serializes a reproducibility record from the analysis plan, schema, aggregate results, formatted table, and optional metadata.
+ * The record is aggregate-only: `toAggregateResults` removes observation-level plot data before serialization (Phase 51 D105a).
+ * Optional input hashes are included only when explicitly supplied; the function performs no file or network I/O.
+ */
 export function generateReproducibilityJson(args: {
   plan: AnalysisPlan;
   schema: Schema;
@@ -342,13 +359,18 @@ export function generateReproducibilityJson(args: {
     ? args.plan
     : { ...args.plan, auditLog };
 
+  const aggregateResults = toAggregateResults(args.results);
   const data: ReproducibilityData = {
+    aggregateOnlyNotice: AGGREGATE_ONLY_NOTICE,
     appVersion: args.appVersion,
     rulesetVersion: args.formattedTable.rulesetVersion,
+    rulesetProvenance: journalRulesets.EasyTableOne_Ruleset.journals.find(
+      (journal) => journal.journal_id === args.formattedTable.journal,
+    )!.provenance,
     libraryVersions: args.results.computeMetadata.libVersions,
     analysisPlan,
     schema: omitDisplayOnlySchemaFields(args.schema),
-    results: args.results,
+    results: aggregateResults,
     formattedTable: args.formattedTable,
     generatedAt,
     dataQualityWarnings: (args.dataQualityWarnings ?? []).map(toReproducibilityWarning),

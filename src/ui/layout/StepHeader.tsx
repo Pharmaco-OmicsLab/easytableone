@@ -1,0 +1,3 @@
+export default function StepHeader({ n, eyebrow, title, lede, next }: { n: number; eyebrow: string; title: string; lede: string; next?: string }) {
+  return <header className="mb-6 flex flex-wrap items-end justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-wider text-blue-700">{String(n).padStart(2, "0")} · {eyebrow}</p><h1 className="mt-1 text-2xl font-bold text-gray-900">{title}</h1><p className="mt-2 max-w-3xl text-sm leading-relaxed text-gray-600">{lede}</p></div>{next && <p className="text-sm text-gray-600">Next: <span className="font-semibold text-gray-900">{next}</span></p>}</header>;
+}

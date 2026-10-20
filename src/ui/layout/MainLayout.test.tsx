@@ -1,12 +1,14 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useStore } from "../../store";
 import { WELCOME_SEEN_KEY } from "../components/WelcomeModal";
+import { SMD_GLOSSARY } from "../../content/smdGuidance";
 import MainLayout from "./MainLayout";
 
 vi.mock("../../workers/pyodide.client", () => ({
   pyodideClient: {
     isReady: vi.fn(async () => true),
+    restart: vi.fn(async () => true),
     detectRegime: vi.fn(async () => ({
       n: 0,
       events: 0,
@@ -36,35 +38,36 @@ describe("MainLayout help trigger", () => {
     } as any);
   });
 
-  it("renders the help button in the top bar and not the rail bottom", () => {
+  it("renders the Help menu in the top bar and not in the rail bottom", () => {
     render(<MainLayout />);
 
     const topBar = screen.getByTestId("app-top-bar");
     const railBottom = screen.getByTestId("stage-rail-bottom");
-    expect(within(topBar).getByRole("button", { name: "Open tutorial" })).toBeDefined();
-    expect(within(topBar).getByRole("button", { name: "Open FAQ" })).toBeDefined();
-    expect(within(topBar).getByRole("button", { name: "About EasyTableOne" })).toBeDefined();
+    expect(within(topBar).getByRole("button", { name: "Help" })).toBeDefined();
     expect(within(railBottom).queryByRole("button", { name: "Open tutorial" })).toBeNull();
   });
 
   it("opens the tutorial from the top-bar help button", () => {
     render(<MainLayout />);
 
-    fireEvent.click(within(screen.getByTestId("app-top-bar")).getByRole("button", { name: "Open tutorial" }));
+    fireEvent.click(within(screen.getByTestId("app-top-bar")).getByRole("button", { name: "Help" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Open tutorial" }));
     expect(useStore.getState().tutorialOpen).toBe(true);
   });
 
   it("opens the FAQ from the top-bar FAQ button", () => {
     render(<MainLayout />);
 
-    fireEvent.click(within(screen.getByTestId("app-top-bar")).getByRole("button", { name: "Open FAQ" }));
+    fireEvent.click(within(screen.getByTestId("app-top-bar")).getByRole("button", { name: "Help" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Open FAQ" }));
     expect(useStore.getState().faqOpen).toBe(true);
   });
 
   it("opens the About modal from the top-bar info button", () => {
     render(<MainLayout />);
 
-    fireEvent.click(within(screen.getByTestId("app-top-bar")).getByRole("button", { name: /About EasyTableOne/ }));
+    fireEvent.click(within(screen.getByTestId("app-top-bar")).getByRole("button", { name: "Help" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "About EasyTableOne" }));
     expect(screen.getByRole("dialog", { name: "About EasyTableOne" })).toBeDefined();
     expect(useStore.getState().aboutOpen).toBe(true);
   });
@@ -103,9 +106,8 @@ describe("MainLayout responsive shell", () => {
 
     const aside = container.querySelector("aside");
     expect(aside).toBeTruthy();
-    expect(aside?.className).toContain("hidden");
-    expect(aside?.className).toContain("md:flex");
-    expect(aside?.className).toContain("w-64");
+    expect(aside?.className).toContain("bg-white");
+    expect(aside?.className).toContain("flex");
   });
 
   it("opens a modal drawer with stage navigation from the hamburger", async () => {
@@ -115,7 +117,7 @@ describe("MainLayout responsive shell", () => {
     fireEvent.click(hamburger);
 
     expect(hamburger.getAttribute("aria-expanded")).toBe("true");
-    const drawer = screen.getByRole("dialog", { name: "Stages" });
+    const drawer = screen.getByRole("dialog", { name: "Workflow" });
     expect(drawer.getAttribute("aria-modal")).toBe("true");
     await waitFor(() => expect(drawer.contains(document.activeElement)).toBe(true));
   });
@@ -125,10 +127,10 @@ describe("MainLayout responsive shell", () => {
     render(<MainLayout />);
 
     fireEvent.click(screen.getByRole("button", { name: "Open navigation" }));
-    const drawer = screen.getByRole("dialog", { name: "Stages" });
-    fireEvent.click(within(drawer).getByRole("button", { name: "1. Import data" }));
+    const drawer = screen.getByRole("dialog", { name: "Workflow" });
+    fireEvent.click(within(drawer).getByRole("button", { name: /1\. Import data/ }));
 
-    expect(screen.queryByRole("dialog", { name: "Stages" })).toBeNull();
+    expect(screen.queryByRole("dialog", { name: "Workflow" })).toBeNull();
     expect(useStore.getState().stage).toBe(1);
   });
 
@@ -137,13 +139,13 @@ describe("MainLayout responsive shell", () => {
     render(<MainLayout />);
 
     const topBar = screen.getByTestId("app-top-bar");
-    expect(within(topBar).getByText("Step 2 / 7 - 2. Variable types")).toBeDefined();
-    expect(within(topBar).getByText("2. Variable types").className).toContain("md:block");
+    expect(within(topBar).getByText("STEP 2 OF 7")).toBeDefined();
+    expect(within(topBar).getByText("Variable types")).toBeDefined();
 
     const progress = within(topBar).getByRole("progressbar");
     expect(progress.getAttribute("aria-valuenow")).toBe("2");
-    expect(progress.getAttribute("aria-valuemin")).toBe("1");
     expect(progress.getAttribute("aria-valuemax")).toBe("7");
+    expect(progress.getAttribute("aria-valuetext")).toBe("Step 2 of 7, Variable types");
   });
 
   it("closes on Escape and restores focus to the hamburger", async () => {
@@ -151,12 +153,12 @@ describe("MainLayout responsive shell", () => {
 
     const hamburger = screen.getByRole("button", { name: "Open navigation" });
     fireEvent.click(hamburger);
-    const drawer = screen.getByRole("dialog", { name: "Stages" });
+    const drawer = screen.getByRole("dialog", { name: "Workflow" });
     await waitFor(() => expect(drawer.contains(document.activeElement)).toBe(true));
 
     fireEvent.keyDown(document, { key: "Escape" });
 
-    expect(screen.queryByRole("dialog", { name: "Stages" })).toBeNull();
+    expect(screen.queryByRole("dialog", { name: "Workflow" })).toBeNull();
     await waitFor(() => expect(document.activeElement).toBe(hamburger));
   });
 
@@ -166,15 +168,12 @@ describe("MainLayout responsive shell", () => {
     const topBar = screen.getByTestId("app-top-bar");
     expect(within(topBar).getByRole("button", { name: "Open navigation" })).toBeDefined();
     expect(within(topBar).getByRole("button", { name: "Save the current EasyTableOne session as JSON" })).toBeDefined();
-    expect(within(topBar).getByRole("button", { name: "Open tutorial" })).toBeDefined();
-    expect(within(topBar).getByRole("button", { name: "Open FAQ" })).toBeDefined();
-    expect(within(topBar).getByRole("button", { name: "About EasyTableOne" })).toBeDefined();
+    expect(within(topBar).getByRole("button", { name: "Help" })).toBeDefined();
     expect(within(topBar).getByRole("button", { name: "Concise" })).toBeDefined();
     expect(within(topBar).getByRole("button", { name: "Detailed" })).toBeDefined();
 
-    const content = container.querySelector("#main-scroll-container > div:last-child");
-    expect(content?.className).toContain("p-4");
-    expect(content?.className).toContain("md:p-8");
+    const content = container.querySelector("#main");
+    expect(content?.className).toContain("overflow-y-auto");
 
     const footer = container.querySelector("footer") as HTMLElement;
     expect(footer.className).toContain("border-t");
@@ -196,7 +195,7 @@ describe("MainLayout responsive shell", () => {
     expect(shell?.className).toContain("min-h-0");
     expect(shell?.className).toContain("overflow-hidden");
 
-    const main = container.querySelector("#main-scroll-container");
+    const main = container.querySelector("#main");
     expect(main?.className).toContain("min-h-0");
     expect(main?.className).toContain("overflow-y-auto");
   });
@@ -254,29 +253,29 @@ describe("MainLayout navigation clarity", () => {
     const { container } = render(<MainLayout />);
     const rail = container.querySelector("aside nav") as HTMLElement;
 
-    expect(rail.querySelectorAll(":scope > button")).toHaveLength(7);
-    const railLabels = Array.from(rail.querySelectorAll(":scope > button")).map((button) => button.textContent ?? "");
+    expect(rail.querySelectorAll(":scope > ol > li > button")).toHaveLength(7);
+    const railLabels = Array.from(rail.querySelectorAll(":scope > ol > li > button")).map((button) => button.textContent ?? "");
     expect(railLabels.join(" ")).toContain("1. Import data");
-    expect(railLabels.join(" ")).toContain("7. Format and export");
+    expect(railLabels.join(" ")).toContain("7. Format & export");
     expect(railLabels.some((label) => label.trim() === "Import data")).toBe(false);
-    expect(within(rail).getByRole("button", { name: "1. Import data" })).toBeDefined();
+    expect(within(rail).getByRole("button", { name: /1\. Import data/ })).toBeDefined();
     expect(within(rail).getByRole("button", { name: /2\. Variable types/ })).toBeDefined();
     expect(within(rail).getByRole("button", { name: /3\. Data checks/ })).toBeDefined();
 
-    const active = within(rail).getByRole("button", { name: "1. Import data" });
+    const active = within(rail).getByRole("button", { name: /1\. Import data/ });
     expect(active.getAttribute("aria-current")).toBe("step");
 
     const stage6 = within(rail).getByRole("button", { name: /4\. Analysis plan/ });
     expect(stage6.getAttribute("title")).toBe("Run the data checks before planning");
   });
 
-  it.each([1, 2, 3])("keeps Import data active and progress at step 1 for internal stage %s", (stage) => {
+  it.each([1, 2, 3])("keeps Import data active and progress at step 1 for internal stage %s", (stage: number) => {
     useStore.setState({ stage } as any);
     const { container } = render(<MainLayout />);
     const rail = container.querySelector("aside nav") as HTMLElement;
 
-    expect(within(rail).getByRole("button", { name: "1. Import data" }).getAttribute("aria-current")).toBe("step");
-    expect(within(screen.getByTestId("app-top-bar")).getByText("Step 1 / 7 - 1. Import data")).toBeDefined();
+    expect(within(rail).getByRole("button", { name: /1\. Import data/ }).getAttribute("aria-current")).toBe("step");
+    expect(within(screen.getByTestId("app-top-bar")).getByText("STEP 1 OF 7")).toBeDefined();
   });
 
   it("gates modeling until statistical review has results", () => {
@@ -297,7 +296,8 @@ describe("MainLayout navigation clarity", () => {
     const { container } = render(<MainLayout />);
     const rail = container.querySelector("aside nav") as HTMLElement;
 
-    const modeling = within(rail).getByRole("button", { name: /6\. Modeling \(optional\).*Enable modeling/ });
+    const modeling = within(rail).getByRole("button", { name: /6\. Modeling \(optional\)/ });
+    expect(modeling.textContent).toContain("Enable modeling");
     expect(modeling.hasAttribute("disabled")).toBe(false);
     fireEvent.click(modeling);
 
@@ -308,11 +308,56 @@ describe("MainLayout navigation clarity", () => {
   it("renders glossary and opens the existing settings modal from help", () => {
     render(<MainLayout />);
 
-    fireEvent.click(within(screen.getByTestId("app-top-bar")).getByRole("button", { name: "Open tutorial" }));
+    fireEvent.click(within(screen.getByTestId("app-top-bar")).getByRole("button", { name: "Help" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Open tutorial" }));
     expect(screen.getByText("Glossary")).toBeDefined();
-    expect(screen.getByText("Standardized mean difference, an effect-size measure often used to describe baseline imbalance.")).toBeDefined();
+    expect(screen.getByText(SMD_GLOSSARY)).toBeDefined();
 
     fireEvent.click(screen.getByRole("button", { name: "Open Settings" }));
     expect(screen.getByRole("heading", { name: "Settings" })).toBeDefined();
+    const checkbox = screen.getByRole("checkbox", { name: /Include input data hash/ });
+    expect(screen.getAllByRole("checkbox")).toHaveLength(1);
+    fireEvent.click(checkbox);
+    expect(useStore.getState().includeInputDataHashInRepro).toBe(true);
+  });
+
+  it("renders each stage 1–9 inside main#main", () => {
+    const { container } = render(<MainLayout />);
+    const main = container.querySelector("main#main")!;
+    for (let stage = 1; stage <= 9; stage++) {
+      act(() => useStore.setState({ stage } as any));
+      expect(main.contains(container.querySelector("#main-scroll-container")?.firstElementChild ?? null)).toBe(true);
+      expect(container.querySelector("#main-scroll-container")?.firstElementChild).toBeTruthy();
+    }
+  });
+
+  it("closes Help with Escape and restores focus to its button", async () => {
+    render(<MainLayout />);
+    const help = within(screen.getByTestId("app-top-bar")).getByRole("button", { name: "Help" });
+    fireEvent.click(help);
+    const menuItem = screen.getByRole("menuitem", { name: "Open tutorial" });
+    await waitFor(() => expect(document.activeElement).toBe(menuItem));
+    fireEvent.keyDown(menuItem, { key: "Escape" });
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(document.activeElement).toBe(help);
+  });
+
+  it("closes Help on an outside pointerdown without moving focus", async () => {
+    render(<MainLayout />);
+    const help = within(screen.getByTestId("app-top-bar")).getByRole("button", { name: "Help" });
+    fireEvent.click(help);
+    await waitFor(() => expect(screen.getByRole("menu")).toBeDefined());
+    const outside = screen.getByRole("main");
+    outside.focus();
+    fireEvent.pointerDown(outside);
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(document.activeElement).toBe(outside);
+  });
+
+  it("keeps workflow gate description IDs unique while the drawer is open", () => {
+    render(<MainLayout />);
+    fireEvent.click(screen.getByRole("button", { name: "Open navigation" }));
+    const ids = Array.from(document.querySelectorAll<HTMLElement>('[id^="workflow-gate-"]'), (element) => element.id);
+    expect(new Set(ids).size).toBe(ids.length);
   });
 });

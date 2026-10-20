@@ -190,6 +190,34 @@ describe('generateDiagnosticsCsv', () => {
     expect(dataRow).toContain('1: 25 (100.0%)'); // "1.0" -> "1"
   });
 
+  it('applies the small-sample whole-percent rule only when the journal ruleset opts in (D108)', () => {
+    const percentageResults: StatisticalResults = {
+      perVariable: [{
+        variable: 'Flag',
+        summaryByGroup: {
+          Small: { counts: { Yes: 52 }, percentages: { Yes: 52.1 }, n: 48 },
+          Large: { counts: { Yes: 100 }, percentages: { Yes: 100 }, n: 100 },
+        },
+        overallSummary: { counts: { Yes: 152 }, percentages: { Yes: 52.1 }, n: 148 },
+        test: { name: 'Chi-square', statistic: 1, pValue: 0.5 },
+        notes: [],
+      }],
+      groups: [{ name: 'Small', n: 48 }, { name: 'Large', n: 100 }],
+      totalN: 148,
+      computeMetadata: { libVersions: {}, seed: 42 },
+    };
+    const rowFor = (journal: string) => generateDiagnosticsCsv(percentageResults, undefined, undefined, journal).split('\r\n')[1];
+
+    // The two failing defaults are NEJM; diagnostics keeps the pre-existing one-decimal display there.
+    expect(generateDiagnosticsCsv(percentageResults).split('\r\n')[1]).toContain('52.1%');
+    expect(rowFor('NEJM')).toContain('100.0%');
+    expect(rowFor('LANCET')).toContain('52.1%');
+    expect(rowFor('NATURE_MED')).toContain('52.1%');
+    expect(rowFor('GENERIC')).toContain('52.1%');
+    expect(rowFor('JAMA')).toContain('52%');
+    expect(rowFor('JAMA')).toContain('100.0%');
+  });
+
   it('formats continuous median/IQR and mean/SD summaries using D40 formatting rules (Round 8 Session B)', () => {
     const localResults: StatisticalResults = {
       perVariable: [

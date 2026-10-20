@@ -1,5 +1,6 @@
 import { Component, useEffect, useRef, type ErrorInfo, type ReactNode } from 'react';
 import vegaEmbed, { type EmbedOptions } from 'vega-embed';
+import { expressionInterpreter } from 'vega-interpreter';
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -66,6 +67,9 @@ function VegaPlotInner({ spec, options }: VegaPlotProps) {
         const res = await vegaEmbed(containerRef.current, spec, {
           actions: false,
           renderer: 'svg',
+          // CSP-safe expression evaluation (D105(c)): interpret the AST instead of `new Function`.
+          ast: true,
+          expr: expressionInterpreter,
           ...options,
         });
 

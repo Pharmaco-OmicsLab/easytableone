@@ -226,6 +226,7 @@ export const TestMethodSchema = z.enum([
   "fishers_exact",
   "kruskal_wallis",
   "oneway_anova",
+  "ordinal_rank",
 ]);
 export type TestMethod = z.infer<typeof TestMethodSchema>;
 
@@ -265,6 +266,7 @@ export const AnalysisPlanSchema = z.object({
       statisticalTestOverride: StatisticalTestSchema.optional(),
       chiSquareYatesCorrection: z.boolean().optional(),
       displayLevel: z.union([z.string(), z.number()]).optional(),
+      levelOrder: z.array(z.union([z.string(), z.number()])).optional(),
     }),
   ),
   showSMD: z.boolean(),
@@ -294,6 +296,7 @@ export const PostHocSchema = z.object({
     perPairTest: z.string().optional(),
     significant: z.boolean(),
   })),
+  caveat: z.string().optional(),
   error: z.string().optional(),
 });
 export type PostHoc = z.infer<typeof PostHocSchema>;
@@ -401,6 +404,13 @@ export type PlotTheme = z.infer<typeof PlotThemeSchema>;
 export const JournalConfigSchema = z.object({
   journal_id: z.string(),
   display_name: z.string(),
+  provenance: z.object({
+    source_title: z.string(),
+    source_url: z.string().url().nullable(),
+    retrieved_on: z.iso.date().nullable(),
+    last_reviewed_on: z.iso.date(),
+    notes: z.string(),
+  }),
   missing_data_label: z.string().optional(),
   /** Title template. `{grouping_label}` placeholder substituted at render time (D40). */
   table_title_template: z.string().optional(),
@@ -422,6 +432,7 @@ export const JournalConfigSchema = z.object({
       display: z.string().optional()
     })).optional(),
     threshold_low: z.string(),
+    significant_figures: z.number().int().positive().optional(),
     exact_p_values: z.boolean().optional(),
     decimal_separator: z.string().optional(),
     italicize_p: z.boolean()
@@ -429,9 +440,14 @@ export const JournalConfigSchema = z.object({
   summary_statistics: z.object({
     continuous_normal: z.string(),
     continuous_non_normal: z.string(),
+    continuous_label_template: z.string(),
     iqr_delimiter: z.string(),
     categorical: z.string(),
-    percentage_decimals: z.number()
+    percentage_decimals: z.number(),
+    percentage_decimals_rule: z.object({
+      below_n: z.number().int().positive(),
+      decimals: z.number().int().nonnegative(),
+    }).optional(),
   }),
   table_styling: z.object({
     bold_headers: z.boolean(),
@@ -440,6 +456,14 @@ export const JournalConfigSchema = z.object({
     footnote_sequence: z.array(z.string())
   }),
   plot_theme: PlotThemeSchema,
+}).superRefine((journal, context) => {
+  const generic = journal.journal_id === "GENERIC";
+  if (!generic && (journal.provenance.source_url === null || journal.provenance.retrieved_on === null)) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["provenance"], message: "Only GENERIC may omit a provenance URL or retrieval date" });
+  }
+  if (journal.provenance.retrieved_on && journal.provenance.last_reviewed_on < journal.provenance.retrieved_on) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["provenance", "last_reviewed_on"], message: "Review date cannot precede retrieval date" });
+  }
 });
 export type JournalConfig = z.infer<typeof JournalConfigSchema>;
 
@@ -447,6 +471,11 @@ export const JournalRulesetSchema = z.object({
   EasyTableOne_Ruleset: z.object({
     version: z.string(),
     changelog: z.string().optional(),
+    review_policy: z.object({
+      cadence_months: z.number().int().positive(),
+      also_before: z.string(),
+      report_discrepancy: z.string(),
+    }),
     global_defaults: z.object({
       missing_data_label: z.string(),
       normality_logic: NormalityLogicSchema,
@@ -458,5 +487,20 @@ export const JournalRulesetSchema = z.object({
       then: z.record(z.string(), z.string())
     }))
   })
+}).superRefine((ruleset, context) => {
+  for (const [index, journal] of ruleset.EasyTableOne_Ruleset.journals.entries()) {
+    const threshold = journal.p_value_formatting.threshold_low;
+    if (!threshold.startsWith("<")) continue;
+    const separator = journal.p_value_formatting.decimal_separator ?? ".";
+    const normalized = threshold.slice(1).trim().replace(/[·,]/g, ".").replace(separator, ".");
+    const value = Number(normalized);
+    if (!Number.isFinite(value) || value <= 0) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["EasyTableOne_Ruleset", "journals", index, "p_value_formatting", "threshold_low"],
+        message: `threshold_low must contain a positive numeric bound; received ${threshold}`,
+      });
+    }
+  }
 });
 export type JournalRuleset = z.infer<typeof JournalRulesetSchema>;
