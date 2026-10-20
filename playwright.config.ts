@@ -49,7 +49,8 @@ export default defineConfig({
   retries: 0,
   workers: 1,
   use: {
-    trace: "on-first-retry",
+    // retries are 0, so "on-first-retry" never records; keep a trace of every CI failure instead.
+    trace: process.env.CI ? "retain-on-failure" : "on-first-retry",
   },
   projects: [
     {

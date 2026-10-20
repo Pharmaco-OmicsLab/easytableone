@@ -228,7 +228,8 @@ async function runModeling(page: Page) {
   await run.click();
   // While running the button is relabelled "Running..."; wait for it to return to the idle label.
   await expect(page.getByRole("button", { name: "Running..." })).toBeVisible({ timeout: 30_000 }).catch(() => undefined);
-  await expect(page.getByRole("button", { name: "Run logistic regression" })).toBeVisible({ timeout: 300_000 });
+  // Firefox runs the statistics 4-7x slower than Chromium, and CI runners are slower again.
+  await expect(page.getByRole("button", { name: "Run logistic regression" })).toBeVisible({ timeout: 900_000 });
   await expect(page.getByRole("button", { name: "Run logistic regression" })).toBeEnabled();
 
   await page.getByRole("button", { name: "Continue to Format and export" }).click();
@@ -247,8 +248,9 @@ async function clickAndCollect(page: Page, testId: string, expectedDownloads = 1
   try {
     await page.getByTestId(testId).click();
     if (testId === "download-modeling-report-docx") {
+      // CI runners are several times slower than a desktop; the DOCX embeds rendered figures.
       await expect.poll(async () => downloads.length > 0 || (await page.getByRole("status").allTextContents()).some((text) => text.includes("Failed to export modeling report DOCX.")), {
-        timeout: 30_000,
+        timeout: 300_000,
         message: "neither a modeling report DOCX download nor an export failure toast appeared",
       }).toBe(true);
       if (downloads.length === 0) throw new Error(`Modeling report export toast: ${(await page.getByRole("status").allTextContents()).join(" | ")}`);
@@ -372,7 +374,7 @@ test.describe("Phase 51 data locality (production build)", () => {
   test.describe.configure({ mode: "serial" });
 
   test("online pass: every request stays on the app origin; no CSP violations", async ({ browser, baseURL }, testInfo) => {
-    test.setTimeout(900_000);
+    test.setTimeout(2_400_000);
     expect(baseURL, "baseURL must be configured").toBeTruthy();
     const run = await newInstrumentedPage(browser, baseURL!);
     try {
@@ -415,7 +417,7 @@ test.describe("Phase 51 data locality (production build)", () => {
       browserName === "webkit",
       WEBKIT_OFFLINE_FIXME_REASON,
     );
-    test.setTimeout(900_000);
+    test.setTimeout(2_400_000);
     expect(baseURL, "baseURL must be configured").toBeTruthy();
     const run = await newInstrumentedPage(browser, baseURL!); // new context => cold HTTP cache
     try {
